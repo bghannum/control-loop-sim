@@ -64,6 +64,9 @@ CONFIG = {
         "bound_margin_k": 5.0,
         "max_delta_per_tick_pct": 1000.0,
         "trip_safe_output_pct": 0.0,
+        "untrusted_auto_safe_after_s": 500.0,
+        "trip_lockout_threshold": 2,
+        "trip_correction_tolerance_pct": 1.0,
     },
 }
 
@@ -223,6 +226,8 @@ def test_manual_override_flows_through_to_interlock_end_to_end():
         "interlock": {
             "t_min_k": 273.15, "t_max_k": 373.15, "bound_margin_k": 5.0,
             "max_delta_per_tick_pct": 1000.0, "trip_safe_output_pct": 0.0,
+            "untrusted_auto_safe_after_s": 500.0, "trip_lockout_threshold": 2,
+            "trip_correction_tolerance_pct": 1.0,
         },
     }
     loop = ControlLoop(config)
@@ -337,3 +342,28 @@ def test_switching_into_ai_mode_resets_the_failure_clock():
     loop.set_mode("ai")  # a fresh transition back into ai -> should reset
 
     assert loop.ai.seconds_since_last_success() < 1.0
+
+
+def test_interlock_locked_out_appears_in_record():
+    loop = make_loop()
+    loop.interlock.locked_out = True  # whitebox, same pattern as loop.ai/loop.pid above
+    record = loop.tick()
+    assert record["interlock_locked_out"] is True
+
+
+def test_reset_interlock_clears_lockout_and_detector_state():
+    # Needs a real (nonzero) noise_sigma_k -- the detector's z-score divides
+    # by it, same reason as test_stuck_fault_freezes_actuator_once_detector_flags_it.
+    config = {**CONFIG, "sensor": {**CONFIG["sensor"], "noise_sigma_k": 0.15}}
+    loop = ControlLoop(config)
+    loop.interlock.locked_out = True
+    loop.interlock.trip_strikes = 5
+    for _ in range(10):  # build up real detector window/CUSUM state
+        loop.detector.evaluate(300.0)
+    assert len(loop.detector._window) == 10
+
+    loop.reset_interlock()
+
+    assert loop.interlock.locked_out is False
+    assert loop.interlock.trip_strikes == 0
+    assert len(loop.detector._window) == 0

@@ -1,19 +1,25 @@
 """Known-outcome scenarios for Interlock, using the real config.yaml
-bounds. Covers all five checks in order, and specifically the
+bounds. Covers all six checks in order, and specifically the
 override-eligibility distinction that's central to the safety story:
-- Check 1 (sensor-trust), check 2 (hard over/under-temp trip), and check 4
-  (slew-rate): ABSOLUTE, never overridable by anyone -- the doc's
-  "regardless of source"/"regardless of who proposed it" phrasing, and
-  check 4's own "fat-fingered manual override" example, only make sense
-  under this reading.
+- Check 0 (lockout), check 1 (sensor-trust), check 2 (hard over/under-temp
+  trip), and check 4 (slew-rate): ABSOLUTE, never overridable by anyone --
+  the doc's "regardless of source"/"regardless of who proposed it"
+  phrasing, and check 4's own "fat-fingered manual override" example, only
+  make sense under this reading.
 - Check 3 (bounds/margin): the one check manual can override, with a
   persistent warning (override_active=True).
+
+Also covers backlog items 2-5 (2026-08-05): the sensor-trust gate forcing
+safe output instead of a plain hold (past a hard bound, or after too long
+untrusted), and the hard trip escalating to a latching lockout after
+repeated uncorrected excursions.
 See docs/control-loop-architecture.md §3.4.
 """
 
 import pytest
 
 from engine.interlock import Interlock
+from tests.conftest import FakeClock
 
 # Real config.yaml values.
 T_MIN_K = 273.15
@@ -21,13 +27,19 @@ T_MAX_K = 373.15
 BOUND_MARGIN_K = 5.0
 MAX_DELTA_PCT = 10.0
 TRIP_SAFE_OUTPUT_PCT = 0.0
+UNTRUSTED_AUTO_SAFE_AFTER_S = 20.0
+TRIP_LOCKOUT_THRESHOLD = 2
+TRIP_CORRECTION_TOLERANCE_PCT = 1.0
 
 
-def make_interlock(initial_output=50.0):
+def make_interlock(initial_output=50.0, clock=None):
     return Interlock(
         t_min_k=T_MIN_K, t_max_k=T_MAX_K, bound_margin_k=BOUND_MARGIN_K,
         max_delta_per_tick_pct=MAX_DELTA_PCT, trip_safe_output_pct=TRIP_SAFE_OUTPUT_PCT,
-        initial_output=initial_output,
+        untrusted_auto_safe_after_s=UNTRUSTED_AUTO_SAFE_AFTER_S,
+        trip_lockout_threshold=TRIP_LOCKOUT_THRESHOLD,
+        trip_correction_tolerance_pct=TRIP_CORRECTION_TOLERANCE_PCT,
+        initial_output=initial_output, clock=clock or FakeClock(),
     )
 
 
@@ -64,6 +76,49 @@ def test_untrusted_proposal_matching_last_output_is_allow_not_reject():
         sensor_trusted=False, override_requested=False,
     )
     assert decision.result == "allow"  # already holding, nothing to reject
+
+
+# --- Item 3: sensor-untrusted duration auto-safe-default ---
+
+
+def test_untrusted_duration_under_threshold_still_holds_at_last_known_good():
+    clock = FakeClock(start=1000.0)
+    interlock = make_interlock(initial_output=50.0, clock=clock)
+    interlock.evaluate(proposed_output_pct=80.0, source="pid", t_sensed=320.0, sensor_trusted=False, override_requested=False)
+
+    clock.advance(UNTRUSTED_AUTO_SAFE_AFTER_S - 1.0)  # still under threshold
+    decision = interlock.evaluate(proposed_output_pct=80.0, source="pid", t_sensed=320.0, sensor_trusted=False, override_requested=False)
+
+    assert decision.actuator_output == pytest.approx(50.0)  # still just holding
+    assert "holding at last-known-good" in decision.reason
+
+
+def test_untrusted_duration_exceeding_threshold_forces_safe_output():
+    clock = FakeClock(start=1000.0)
+    interlock = make_interlock(initial_output=50.0, clock=clock)
+    interlock.evaluate(proposed_output_pct=80.0, source="pid", t_sensed=320.0, sensor_trusted=False, override_requested=False)
+
+    clock.advance(UNTRUSTED_AUTO_SAFE_AFTER_S + 1.0)
+    decision = interlock.evaluate(proposed_output_pct=80.0, source="pid", t_sensed=320.0, sensor_trusted=False, override_requested=False)
+
+    assert decision.actuator_output == pytest.approx(TRIP_SAFE_OUTPUT_PCT)
+    assert decision.result == "reject"
+    assert "auto safe default" in decision.reason
+
+
+def test_untrusted_timer_resets_once_trusted_again():
+    clock = FakeClock(start=1000.0)
+    interlock = make_interlock(initial_output=50.0, clock=clock)
+    interlock.evaluate(proposed_output_pct=80.0, source="pid", t_sensed=320.0, sensor_trusted=False, override_requested=False)
+    clock.advance(UNTRUSTED_AUTO_SAFE_AFTER_S + 1.0)
+
+    # Briefly trusted again -- should clear the staleness timer.
+    interlock.evaluate(proposed_output_pct=55.0, source="pid", t_sensed=320.0, sensor_trusted=True, override_requested=False)
+
+    # Untrusted again immediately after -- should NOT auto-safe-default yet,
+    # the timer restarted from this moment.
+    decision = interlock.evaluate(proposed_output_pct=80.0, source="pid", t_sensed=320.0, sensor_trusted=False, override_requested=False)
+    assert "holding at last-known-good" in decision.reason
 
 
 # --- Check 2: hard over/under-temperature trip -- absolute, bypasses slew ---
@@ -129,16 +184,113 @@ def test_just_below_hard_trip_threshold_still_uses_the_softer_margin_check():
     assert decision.actuator_output == pytest.approx(40.0)
 
 
-def test_sensor_untrusted_takes_priority_over_hard_trip():
+def test_hard_bound_wins_over_sensor_untrusted_not_last_known_good():
+    # Reversed from the original Phase-4-era design (backlog item 5): a
+    # forced safe output is one-directional and can't make things worse,
+    # even acting on a reading already flagged untrusted -- so it takes
+    # priority over the plain "hold at last-known-good" the sensor-trust
+    # gate would otherwise do.
     interlock = make_interlock(initial_output=50.0)
     decision = interlock.evaluate(
-        proposed_output_pct=0.0, source="pid", t_sensed=400.0,  # past t_max AND untrusted
+        proposed_output_pct=80.0, source="pid", t_sensed=400.0,  # past t_max AND untrusted
         sensor_trusted=False, override_requested=False,
     )
-    # Should hold at last-known-good (sensor-trust gate's behavior), not
-    # the hard trip's safe-output behavior -- confirms check ordering.
+    assert decision.actuator_output == pytest.approx(TRIP_SAFE_OUTPUT_PCT)
+    assert decision.result == "reject"
+    assert "untrusted AND at/past T_max" in decision.reason
+
+
+def test_sensor_untrusted_below_hard_bound_still_holds_at_last_known_good():
+    interlock = make_interlock(initial_output=50.0)
+    decision = interlock.evaluate(
+        proposed_output_pct=80.0, source="pid", t_sensed=320.0,  # untrusted but nowhere near a bound
+        sensor_trusted=False, override_requested=False,
+    )
     assert decision.actuator_output == pytest.approx(50.0)
-    assert "untrusted" in decision.reason
+    assert decision.reason == "sensor untrusted (Tier-1 detector flag active) -- holding at last-known-good output"
+
+
+# --- Item 4: hard trip escalates to a latching lockout (check 0) ---
+
+
+def trip(interlock, t_sensed=380.0, proposed=80.0):
+    return interlock.evaluate(proposed_output_pct=proposed, source="pid", t_sensed=t_sensed, sensor_trusted=True, override_requested=False)
+
+
+def calm(interlock, proposed, t_sensed=350.0):
+    return interlock.evaluate(proposed_output_pct=proposed, source="pid", t_sensed=t_sensed, sensor_trusted=True, override_requested=False)
+
+
+def test_single_trip_does_not_lock_out():
+    interlock = make_interlock(initial_output=50.0)
+    decision = trip(interlock)
+    assert decision.result == "reject"
+    assert interlock.trip_strikes == 1
+    assert interlock.locked_out is False
+
+
+def test_two_uncorrected_trip_episodes_engage_lockout():
+    interlock = make_interlock(initial_output=50.0)
+    trip(interlock)
+    calm(interlock, proposed=80.0)  # gap tick: controller never proposes anything near safe
+    decision = trip(interlock)
+
+    assert interlock.trip_strikes == 2  # == TRIP_LOCKOUT_THRESHOLD
+    assert interlock.locked_out is True
+    assert decision.actuator_output == pytest.approx(TRIP_SAFE_OUTPUT_PCT)
+    assert "LOCKOUT" in decision.reason
+
+
+def test_correction_during_the_gap_resets_strikes_and_avoids_lockout():
+    interlock = make_interlock(initial_output=50.0)
+    trip(interlock)
+    assert interlock.trip_strikes == 1
+
+    calm(interlock, proposed=0.5)  # genuine correction: at/near the trip's safe value
+    trip(interlock)
+
+    assert interlock.trip_strikes == 1  # reset, not incremented to 2
+    assert interlock.locked_out is False
+
+
+def test_locked_out_forces_safe_output_regardless_of_proposal():
+    interlock = make_interlock(initial_output=50.0)
+    trip(interlock)
+    calm(interlock, proposed=80.0)
+    trip(interlock)
+    assert interlock.locked_out is True
+
+    decision = interlock.evaluate(proposed_output_pct=0.0, source="pid", t_sensed=290.0, sensor_trusted=True, override_requested=False)
+    assert decision.actuator_output == pytest.approx(TRIP_SAFE_OUTPUT_PCT)
+    assert decision.result == "reject"
+
+
+def test_locked_out_cannot_be_overridden_by_manual():
+    interlock = make_interlock(initial_output=50.0)
+    trip(interlock)
+    calm(interlock, proposed=80.0)
+    trip(interlock)
+
+    decision = interlock.evaluate(proposed_output_pct=50.0, source="manual", t_sensed=290.0, sensor_trusted=True, override_requested=True)
+    assert decision.actuator_output == pytest.approx(TRIP_SAFE_OUTPUT_PCT)
+    assert decision.result == "reject"
+
+
+def test_reset_lockout_clears_state_and_resumes_normal_evaluation():
+    interlock = make_interlock(initial_output=50.0)
+    trip(interlock)
+    calm(interlock, proposed=80.0)
+    trip(interlock)
+    assert interlock.locked_out is True
+
+    interlock.reset_lockout()
+    assert interlock.locked_out is False
+    assert interlock.trip_strikes == 0
+
+    decision = interlock.evaluate(proposed_output_pct=5.0, source="pid", t_sensed=320.0, sensor_trusted=True, override_requested=False)
+    assert decision.result == "allow"
+    assert decision.actuator_output == pytest.approx(5.0)
+    assert interlock.locked_out is False
 
 
 # --- Check 3: bounds/margin -- the one overridable check ---

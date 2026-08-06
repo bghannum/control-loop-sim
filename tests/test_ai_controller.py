@@ -11,6 +11,7 @@ import threading
 import pytest
 
 from engine.controllers.ai import AIController
+from tests.conftest import FakeClock
 
 
 class FakeToolUseBlock:
@@ -42,7 +43,11 @@ class FakeMessages:
 
 class FakeClient:
     """behaviors: list of callables (return a FakeResponse or raise) consumed
-    one per call, in order."""
+    one per call, in order. Once exhausted, the last one repeats -- propose()
+    eagerly starts a new background call right after consuming any result
+    (so the AI is always working on the next decision, by design), so a
+    test that only cares about a single specific result would otherwise see
+    that eager follow-up call hit an empty queue and raise IndexError."""
 
     def __init__(self, behaviors):
         self.messages = FakeMessages(self)
@@ -51,19 +56,8 @@ class FakeClient:
 
     def _create(self, **kwargs):
         self.calls.append(kwargs)
-        behavior = self._behaviors.pop(0)
+        behavior = self._behaviors.pop(0) if len(self._behaviors) > 1 else self._behaviors[0]
         return behavior()
-
-
-class FakeClock:
-    def __init__(self, start: float = 1000.0):
-        self.now = start
-
-    def __call__(self) -> float:
-        return self.now
-
-    def advance(self, seconds: float) -> None:
-        self.now += seconds
 
 
 def valid_response(**overrides):
@@ -81,7 +75,6 @@ def make_controller(client, clock=None):
     return AIController(
         client=client,
         model="claude-sonnet-5",
-        history_window_ticks=20,
         max_response_wait_s=10.0,
         clock=clock or FakeClock(),
     )
@@ -105,8 +98,14 @@ def test_successful_proposal_is_committed_on_next_propose():
     assert action.confidence == "high"
     assert action.rationale == "Reading trending toward setpoint."
     assert action.flagged_sensor_concern is False
-    assert action.metadata["waiting"] is False
     assert action.metadata["last_error"] is None
+
+    # propose() eagerly starts a new background call right after consuming
+    # a result (the AI is always working on the next decision) -- wait for
+    # that follow-up to settle too before checking "waiting" clears.
+    wait_for_idle(controller)
+    settled = controller.propose(reading=300.0, setpoint=310.0, history=[], detector_flags={})
+    assert settled.metadata["waiting"] is False
 
 
 def test_holds_last_value_while_a_call_is_pending():
@@ -133,7 +132,11 @@ def test_holds_last_value_while_a_call_is_pending():
     wait_for_idle(controller)
     third = controller.propose(reading=300.0, setpoint=310.0, history=[], detector_flags={})
     assert third.proposed_output_pct == pytest.approx(77.0)
-    assert third.metadata["waiting"] is False
+
+    # Same eager-follow-up consideration as the success test above.
+    wait_for_idle(controller)
+    fourth = controller.propose(reading=300.0, setpoint=310.0, history=[], detector_flags={})
+    assert fourth.metadata["waiting"] is False
 
 
 def test_missing_tool_call_is_a_failure_and_does_not_commit():
@@ -173,7 +176,32 @@ def test_client_exception_is_a_failure_and_does_not_commit():
     action = controller.propose(reading=300.0, setpoint=310.0, history=[], detector_flags={})
 
     assert action.proposed_output_pct == 0.0
-    assert "connection reset" in action.metadata["last_error"]
+    assert action.metadata["last_error"] == "ConnectionError (see server log for details)"
+
+
+def test_third_party_exception_text_is_not_leaked_to_ui_but_is_logged(caplog):
+    # Third-party exception text (network/API client errors) can carry more
+    # detail than should be echoed to a screen someone might be sharing --
+    # only our own raised messages pass through verbatim; anything else is
+    # reduced to a bare type name in the UI-facing metadata, while the full
+    # exception (with a potentially sensitive detail, here a fake URL)
+    # still reaches the log for debugging.
+    def raise_with_sensitive_detail():
+        raise ConnectionError("failed to connect to https://internal-service.example/secret-path?token=abc123")
+
+    client = FakeClient([raise_with_sensitive_detail])
+    controller = make_controller(client)
+
+    with caplog.at_level("WARNING"):
+        # The log call happens inside the background thread while the first
+        # propose() call's request is in flight, not on this second call --
+        # wrap the whole sequence so it's captured regardless.
+        controller.propose(reading=300.0, setpoint=310.0, history=[], detector_flags={})
+        wait_for_idle(controller)
+        action = controller.propose(reading=300.0, setpoint=310.0, history=[], detector_flags={})
+
+    assert "token=abc123" not in action.metadata["last_error"]
+    assert "token=abc123" in caplog.text  # full detail still recoverable from the log
 
 
 def test_no_client_configured_is_an_immediate_failure():

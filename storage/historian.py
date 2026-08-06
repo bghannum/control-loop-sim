@@ -11,6 +11,13 @@ logs a warning and is retried next cycle -- it never raises into the
 caller's thread, and `record()` never blocks (a bounded queue drops and
 logs rather than backing up if the DB is down for a long stretch).
 
+If TimescaleDB isn't reachable yet at construction (e.g. `docker compose
+up` hasn't finished by the time Streamlit starts), schema creation is
+retried on every flush cycle until it succeeds, rather than only once at
+startup -- otherwise a DB that comes up seconds later would leave the
+historian permanently broken for the rest of the session (inserts into a
+table that was never created).
+
 Threading, not a separate process or task queue, is the pragmatic choice
 at this project's scale (a single-user Streamlit demo) -- see the
 architecture doc's explicit non-goal of production-grade multi-user
@@ -73,6 +80,7 @@ class Historian:
         self.batch_interval_s = batch_interval_s
         self.max_batch_size = max_batch_size
         self.ready = False
+        self._schema_failure_logged = False
 
         self._queue: queue.Queue = queue.Queue(maxsize=max_queue_size)
         self._stop_event = threading.Event()
@@ -107,8 +115,17 @@ class Historian:
             with self._connect() as conn, conn.cursor() as cur:
                 cur.execute(CREATE_SCHEMA_SQL)
             self.ready = True
+            self._schema_failure_logged = False
         except Exception:
-            logger.warning("historian: could not reach TimescaleDB at startup", exc_info=True)
+            # Full traceback only on the first failure -- this gets retried
+            # every flush cycle while down (see _flush), and a fresh stack
+            # trace every batch_interval_s for a long outage would just be
+            # log noise once the cause is already known.
+            if not self._schema_failure_logged:
+                logger.warning("historian: could not reach TimescaleDB", exc_info=True)
+                self._schema_failure_logged = True
+            else:
+                logger.warning("historian: still unable to reach TimescaleDB")
             self.ready = False
 
     def _run(self) -> None:
@@ -117,6 +134,16 @@ class Historian:
             self._flush()
 
     def _flush(self) -> None:
+        if not self.ready:
+            # Schema creation failed at startup (or a prior flush) -- retry
+            # it before touching the queue, so if TimescaleDB was simply
+            # not up yet, writes recover on their own once it is. Checked
+            # BEFORE draining the queue so a still-down DB doesn't lose
+            # whatever's already waiting.
+            self._ensure_schema()
+            if not self.ready:
+                return
+
         batch = []
         while len(batch) < self.max_batch_size:
             try:

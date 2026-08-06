@@ -2,16 +2,16 @@
 controller propose -> interlock decide -> plant step -> log.
 
 Implemented incrementally starting Phase 1 (plant + manual only) and grew
-a stage at a time per docs/control-loop-architecture.md §5. As of Phase 4
-every stage in the cycle is real -- the detector drives the interlock's
-sensor-trust gate, and the interlock enforces bounds/slew limits, so the
-full "AI proposes, interlock disposes" cycle is complete (AI itself still
-arrives Phase 5; only manual/PID propose so far).
+a stage at a time per docs/control-loop-architecture.md §5. As of Phase 5,
+manual/PID/AI all propose through the same `Controller` interface, every
+stage of the cycle is real, and the full "AI proposes, interlock disposes"
+loop is complete. Phase 5.5 extended the interlock itself with a latching
+lockout after repeated uncorrected trips (see engine/interlock.py).
 """
 
 from collections import deque
 
-from engine.controllers.ai import AIController
+from engine.controllers.ai import AIController, AnthropicClientLike
 from engine.controllers.base import ProposedAction
 from engine.controllers.manual import ManualController
 from engine.controllers.pid import PIDController
@@ -25,7 +25,7 @@ SETPOINT_CHANGE_RESET_THRESHOLD_K = 1.0  # avoid resetting the detector on slide
 
 
 class ControlLoop:
-    def __init__(self, config: dict, seed: int | None = None, ai_client=None):
+    def __init__(self, config: dict, seed: int | None = None, ai_client: AnthropicClientLike | None = None):
         self.dt = config["simulation"]["dt_seconds"]
         model_type = config["simulation"]["model_type"]
         model_params = config["model_params"][model_type]
@@ -41,7 +41,6 @@ class ControlLoop:
         self.ai = AIController(
             client=ai_client,  # None is fine -- AIController treats it as an immediate failure (held/no proposal)
             model=ai_cfg["model"],
-            history_window_ticks=ai_cfg["history_window_ticks"],
             max_response_wait_s=ai_cfg["max_response_wait_s"],
         )
         self.ai_fallback_threshold_s = ai_cfg["max_response_wait_s"] + ai_cfg["fallback_after_s"]
@@ -80,6 +79,9 @@ class ControlLoop:
             bound_margin_k=interlock_cfg["bound_margin_k"],
             max_delta_per_tick_pct=interlock_cfg["max_delta_per_tick_pct"],
             trip_safe_output_pct=interlock_cfg["trip_safe_output_pct"],
+            untrusted_auto_safe_after_s=interlock_cfg["untrusted_auto_safe_after_s"],
+            trip_lockout_threshold=interlock_cfg["trip_lockout_threshold"],
+            trip_correction_tolerance_pct=interlock_cfg["trip_correction_tolerance_pct"],
         )
         self.manual_override_requested = False
 
@@ -114,6 +116,15 @@ class ControlLoop:
 
     def set_manual_override_requested(self, requested: bool) -> None:
         self.manual_override_requested = requested
+
+    def reset_interlock(self) -> None:
+        """Operator-acknowledged reset (backlog item 2): clears a latched
+        lockout and gives the detector a fresh start too, since "I've
+        confirmed it's safe, resume normal control" should mean the whole
+        safety pipeline gets a clean slate, not just the interlock's own
+        escalation counter."""
+        self.interlock.reset_lockout()
+        self.detector.reset()
 
     def set_pid_gains(self, kp: float, ki: float, kd: float) -> None:
         self.pid.kp, self.pid.ki, self.pid.kd = kp, ki, kd
@@ -189,5 +200,6 @@ class ControlLoop:
             "interlock_reason": decision.reason,
             "override_active": decision.override_active,
             "ai_fallback_active": ai_fallback_active,
+            "interlock_locked_out": self.interlock.locked_out,
             "actuator_output": actuator_output,
         }

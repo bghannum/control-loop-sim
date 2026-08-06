@@ -43,6 +43,11 @@ interlock:
   trip_safe_output_pct: 0.0     # "high-high" trip: forced output once t_sensed is actually at/past t_max_k
                                   # (no active cooling in this system, so off is the safe direction; the
                                   # symmetric t_min_k trip forces 100% instead -- see engine/interlock.py)
+  untrusted_auto_safe_after_s: 20.0  # sensor-trust gate: after this long continuously untrusted, force
+                                       # trip_safe_output_pct instead of holding indefinitely at last-known-good
+  trip_lockout_threshold: 2           # hard trip escalates to a latching lockout after this many separate
+                                        # excursions without the controller ever proposing a correction
+  trip_correction_tolerance_pct: 1.0  # how close to the trip's safe value counts as "the controller corrected"
 
 # Used starting Phase 2 (PID controller)
 pid:

@@ -89,6 +89,38 @@ def test_close_performs_final_flush(clean_table):
     assert count == 1
 
 
+def test_flush_retries_schema_creation_and_recovers_once_db_available(clean_table):
+    # Regression test: schema creation used to only be attempted once, at
+    # construction -- a DB that was simply not up yet left the historian
+    # permanently broken (inserting into a table that was never created)
+    # for the rest of the session, even once the DB came online.
+    bad_dsn = "postgresql://postgres:postgres@localhost:59999/nonexistent"
+    historian = Historian(bad_dsn, batch_interval_s=100.0)  # long interval -- flush manually below
+    assert historian.ready is False
+
+    historian.record(make_record(1))
+    historian.record(make_record(2))
+    assert historian._queue.qsize() == 2
+
+    historian._flush()  # DB still down -- retry fails, queued records must not be lost
+    assert historian.ready is False
+    assert historian._queue.qsize() == 2
+
+    historian.dsn = DSN  # "the DB comes online" -- point at the real one and retry
+    historian._flush()
+    assert historian.ready is True
+    assert historian._queue.qsize() == 0
+
+    conn = psycopg2.connect(DSN)
+    cur = conn.cursor()
+    cur.execute("SELECT tick FROM ticks ORDER BY tick")
+    rows = cur.fetchall()
+    conn.close()
+    historian.close()
+
+    assert rows == [(1,), (2,)]
+
+
 def test_unreachable_db_does_not_raise_or_block():
     bad_dsn = "postgresql://postgres:postgres@localhost:59999/nonexistent"
     historian = Historian(bad_dsn, batch_interval_s=0.5)

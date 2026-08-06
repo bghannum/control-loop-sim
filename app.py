@@ -25,24 +25,44 @@ import time
 import anthropic
 import pandas as pd
 import streamlit as st
-import yaml
 from dotenv import load_dotenv
+from pydantic import ValidationError
 
+from config_schema import load_config
 from engine.loop import ControlLoop
 from storage.historian import Historian
 
 load_dotenv()
+
+K_OFFSET_C = 273.15  # Kelvin<->Celsius offset -- Celsius is display-only, never internal (doc §3.1)
+
+
+def k_to_c(kelvin: float) -> float:
+    return kelvin - K_OFFSET_C
+
+
+def c_to_k(celsius: float) -> float:
+    return celsius + K_OFFSET_C
+
+
+def format_active_flags(flags: dict, empty_label: str = "none") -> str:
+    active = [name for name, is_active in flags.items() if is_active]
+    return ", ".join(active) or empty_label
+
 
 st.set_page_config(page_title="Control Loop Simulation", layout="wide")
 st.title("Safety-Constrained AI Control Loop")
 st.caption("Phase 5: manual / PID / AI (Claude), all through the same interlock. Full control-source comparison.")
 banner_placeholder = st.empty()  # filled in after this rerun's tick, so it reflects the freshest decision
 
-with open("config.yaml") as f:
-    CONFIG = yaml.safe_load(f)
+try:
+    CONFIG = load_config("config.yaml")
+except ValidationError as exc:
+    st.error(f"config.yaml is invalid:\n\n{exc}")
+    st.stop()
 
 HISTORY_LIMIT = 500  # rolling buffer, per docs/control-loop-architecture.md §4
-DECISION_LOG_ROWS = 15
+DECISION_LOG_ROWS_DEFAULT = 50
 
 SCENARIOS = {"Random (no fixed seed)": None}
 for scenario in CONFIG["sensor"]["seeded_scenarios"]:
@@ -79,7 +99,7 @@ with col_controls:
     mode = mode_label.lower()
 
     setpoint_c = st.slider("Setpoint (°C)", min_value=0.0, max_value=100.0, value=50.0, step=1.0)
-    setpoint_k = setpoint_c + 273.15
+    setpoint_k = c_to_k(setpoint_c)
 
     override_requested = False
     if mode == "manual":
@@ -106,9 +126,17 @@ with col_controls:
     spike_clicked = st.button("Trigger spike burst")
 
     st.toggle("Run", key="running")
-    if st.button("Reset"):
-        reset_simulation(seed=SCENARIOS[scenario_label])
-        st.rerun()
+    col_reset, col_reset_interlock = st.columns(2)
+    with col_reset:
+        if st.button("Reset"):
+            reset_simulation(seed=SCENARIOS[scenario_label])
+            st.rerun()
+    with col_reset_interlock:
+        # Operator-acknowledged reset (backlog item 2): clears a latched
+        # lockout and gives the detector a fresh start too. Harmless to
+        # press when there's nothing to reset.
+        if st.button("Reset Interlock"):
+            st.session_state.loop.reset_interlock()
 
     loop = st.session_state.loop
     loop.set_mode(mode)
@@ -122,17 +150,21 @@ with col_controls:
         loop.trigger_spike()
 
     current_temp_k = loop.state["temperature"]
-    st.metric("True temperature", f"{current_temp_k - 273.15:.1f} °C", help=f"{current_temp_k:.2f} K")
+    st.metric("True temperature", f"{k_to_c(current_temp_k):.1f} °C", help=f"{current_temp_k:.2f} K")
     if st.session_state.history:
         latest = st.session_state.history[-1]
-        st.metric("Sensed temperature", f"{latest['t_sensed'] - 273.15:.1f} °C")
+        st.metric("Sensed temperature", f"{k_to_c(latest['t_sensed']):.1f} °C")
         st.metric("Actuator output", f"{latest['actuator_output']:.1f} %")
         st.caption(f"Active faults (ground truth): {', '.join(latest['active_faults']) or 'none'}")
-        flagged = [name for name, active in latest["detector_flags"].items() if active]
-        st.caption(f"Detector flags (Tier-1 belief): {', '.join(flagged) or 'none'}")
+        st.caption(f"Detector flags (Tier-1 belief): {format_active_flags(latest['detector_flags'])}")
         st.caption(
             f"Historian: {'connected' if st.session_state.historian and st.session_state.historian.ready else 'unavailable (not blocking)'}"
         )
+        if loop.interlock.trip_strikes > 0:
+            status = " — LOCKED OUT, awaiting reset" if loop.interlock.locked_out else ""
+            st.caption(
+                f"Interlock trip strikes: {loop.interlock.trip_strikes}/{loop.interlock.trip_lockout_threshold}{status}"
+            )
 
         if mode == "ai":
             proposed = latest["proposed_action"]
@@ -170,7 +202,12 @@ if st.session_state.running:
         st.session_state.historian.record(record)
 
 latest = st.session_state.history[-1] if st.session_state.history else None
-if latest and latest["override_active"]:
+if latest and latest["interlock_locked_out"]:
+    banner_placeholder.error(
+        "INTERLOCK LOCKED OUT — repeated over-temperature trips without correction. Heater forced to "
+        'safe output. Press "Reset Interlock" once conditions are confirmed safe.'
+    )
+elif latest and latest["override_active"]:
     banner_placeholder.error("Interlock override active — operating outside validated safety bounds")
 elif latest and latest["ai_fallback_active"]:
     banner_placeholder.error("AI controller unresponsive — automatic safe fallback active")
@@ -178,25 +215,27 @@ elif latest and latest["ai_fallback_active"]:
 with col_plot:
     if st.session_state.history:
         df = pd.DataFrame(st.session_state.history)
-        df["true_c"] = df["t_true"] - 273.15
-        df["sensed_c"] = df["t_sensed"] - 273.15
-        df["setpoint_c"] = df["setpoint"] - 273.15
+        # Vectorized subtraction (not .apply(k_to_c)) -- idiomatic pandas,
+        # avoids a slow per-row Python call over a column of floats.
+        df["true_c"] = df["t_true"] - K_OFFSET_C
+        df["sensed_c"] = df["t_sensed"] - K_OFFSET_C
+        df["setpoint_c"] = df["setpoint"] - K_OFFSET_C
         st.line_chart(df.set_index("tick")[["true_c", "sensed_c", "setpoint_c"]])
     else:
         st.info("Press Run to start the simulation.")
 
 st.subheader("Interlock decision log")
 st.caption("Every evaluation — allowed, clamped, rejected, or manually overridden — logged with its reason.")
+show_full_history = st.checkbox(f"Show full history (up to {HISTORY_LIMIT} ticks)", value=False)
 if st.session_state.history:
-    log_df = pd.DataFrame(st.session_state.history[-DECISION_LOG_ROWS:][::-1])
-    log_df["detector_flags"] = log_df["detector_flags"].apply(
-        lambda flags: ", ".join(name for name, active in flags.items() if active) or "-"
-    )
+    rows = st.session_state.history if show_full_history else st.session_state.history[-DECISION_LOG_ROWS_DEFAULT:]
+    log_df = pd.DataFrame(rows[::-1])
+    log_df["detector_flags"] = log_df["detector_flags"].apply(lambda flags: format_active_flags(flags, empty_label="-"))
     st.dataframe(
         log_df[
             [
                 "tick", "controller_source", "actuator_output", "interlock_result",
-                "interlock_reason", "override_active", "detector_flags",
+                "interlock_reason", "override_active", "interlock_locked_out", "detector_flags",
             ]
         ],
         hide_index=True,

@@ -48,7 +48,10 @@ rejects for the same reason (§3.4).
 See docs/control-loop-architecture.md §3.5.
 """
 
+import logging
 from collections import deque
+
+logger = logging.getLogger(__name__)
 
 CUSUM_CAP_MULTIPLIER = 2.0
 
@@ -65,7 +68,6 @@ class Detector:
         boot_grace_ticks: int = 0,
         min_samples: int = 5,
     ):
-        self.window_ticks = window_ticks
         self.noise_sigma_k = noise_sigma_k
         self.z_score_threshold = z_score_threshold
         self.cusum_slack_k = cusum_slack_k
@@ -79,6 +81,7 @@ class Detector:
         self._cusum_pos = 0.0
         self._cusum_neg = 0.0
         self._ticks_seen = 0
+        self._prev_flags = {"spike": False, "drift": False, "stuck": False}
 
     def reset(self) -> None:
         """Clear window, CUSUM state, and the boot grace period. Called by
@@ -88,6 +91,7 @@ class Detector:
         self._cusum_pos = 0.0
         self._cusum_neg = 0.0
         self._ticks_seen = 0
+        self._prev_flags = {"spike": False, "drift": False, "stuck": False}
 
     def evaluate(self, reading: float) -> dict:
         self._ticks_seen += 1
@@ -115,4 +119,12 @@ class Detector:
             variance = sum((x - mean) ** 2 for x in self._window) / len(self._window)
             stuck = variance < self.stuck_variance_threshold
 
-        return {"spike": spike, "drift": drift, "stuck": stuck}
+        flags = {"spike": spike, "drift": drift, "stuck": stuck}
+        for name, active in flags.items():
+            if active and not self._prev_flags[name]:
+                logger.warning("detector: %s flag raised (reading=%.2f)", name, reading)
+            elif self._prev_flags[name] and not active:
+                logger.info("detector: %s flag cleared", name)
+        self._prev_flags = flags
+
+        return flags
