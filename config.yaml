@@ -16,12 +16,33 @@ model_params:
 setpoint:
   default_k: 323.15  # K (50 C)
 
+# Used starting Phase 4 (Tier-1 statistical detector). Values empirically
+# tuned (see CLAUDE.md) against synthetic fault sequences: zero false
+# positives across 5000 clean-noise ticks, real drift/spike/stuck all
+# caught, and a legitimate PID step-response transient recovers within a
+# bounded window rather than latching a false flag indefinitely.
+detector:
+  window_ticks: 30           # rolling window for baseline mean / stuck variance
+  z_score_threshold: 6.0      # spike: |reading - baseline_mean| / noise_sigma_k > this
+  cusum_slack_k: 1.0           # CUSUM slack (in units of noise_sigma_k)
+  cusum_threshold_h: 9.0       # CUSUM decision threshold (in units of noise_sigma_k)
+  stuck_variance_ratio: 0.1    # stuck: rolling variance < this * noise_sigma_k^2
+  boot_grace_ticks: 50          # ticks before the detector evaluates anything at all --
+                                  # without this, a normal PID startup ramp (or a big live
+                                  # setpoint change) false-flags as drift, the interlock
+                                  # freezes the actuator at a non-equilibrium value, and the
+                                  # resulting continued heating never lets the flag clear.
+                                  # 40 ticks was already sufficient in testing; 50 adds margin.
+
 # Used starting Phase 4 (interlock bounds/rate-limit checks)
 interlock:
   t_min_k: 273.15           # K (0 C) — hard floor
   t_max_k: 373.15           # K (100 C) — hard ceiling
-  bound_margin_k: 5.0        # reject commands pushing further toward a bound within this margin
+  bound_margin_k: 5.0        # "high" alarm: reject commands pushing further toward a bound within this margin
   max_delta_per_tick_pct: 10.0  # slew limit on heater_output_pct
+  trip_safe_output_pct: 0.0     # "high-high" trip: forced output once t_sensed is actually at/past t_max_k
+                                  # (no active cooling in this system, so off is the safe direction; the
+                                  # symmetric t_min_k trip forces 100% instead -- see engine/interlock.py)
 
 # Used starting Phase 2 (PID controller)
 pid:
@@ -33,11 +54,16 @@ pid:
 ai:
   model: claude-sonnet-5
   history_window_ticks: 20
-  max_response_wait_s: 10   # dead-man timer, doc §3.6
+  max_response_wait_s: 10   # dead-man timer stage 1: warn once this long has passed with no valid response (doc §3.6)
+  fallback_after_s: 10       # dead-man timer stage 2: additional grace after the warning before auto-fallback fires
+  safe_output_pct: 0.0        # dead-man timer stage 3: safe default this system falls back to (no active cooling -- off is safe)
 
 # Used starting Phase 3 (sensor fault injection)
 sensor:
-  noise_sigma_k: 0.15
+  noise_sigma_k: 0.15       # baseline Gaussian noise, always present
+  drift_rate_k_per_s: 0.05  # magnitude of the drift fault, once enabled
+  spike_offset_k: 5.0        # magnitude of the spike fault, once triggered
+  spike_duration_ticks: 2    # how long a triggered spike lasts ("1-3 samples" per doc §3.2)
   seeded_scenarios:
     - name: clean_late_drift
       seed: 1001

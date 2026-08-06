@@ -21,8 +21,19 @@ class ProposedAction:
 
 class Controller(ABC):
     @abstractmethod
-    def propose(self, reading: float, setpoint: float, history: list[dict]) -> ProposedAction:
+    def propose(
+        self, reading: float, setpoint: float, history: list[dict], detector_flags: dict
+    ) -> ProposedAction:
         """Given the latest (possibly faulted) sensor reading, the current
-        setpoint, and recent tick history, propose a next actuator command.
-        Does not know about interlock bounds — that's the interlock's job.
+        setpoint, recent tick history, and the Tier-1 detector's current
+        flag state, propose a next actuator command. Does not know about
+        interlock bounds — that's the interlock's job.
+
+        detector_flags is passed to every controller for interface
+        uniformity (Manual/PID ignore it, same as they already ignore
+        history) but exists specifically for the AI controller (Phase 5),
+        per docs/control-loop-architecture.md §3.3: the AI sees the
+        detector's flag directly rather than inferring anomalies itself
+        from raw history -- keeping "control decision" and "anomaly
+        detection" as separate jobs.
         """

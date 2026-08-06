@@ -1,11 +1,10 @@
 streamlit
 numpy
+pandas
 scipy
 pyyaml
 python-dotenv
 pydantic
 anthropic
 pytest
-
-# Added in Phase 4 when the historian's batched writer is wired up:
-# psycopg2-binary
+psycopg2-binary

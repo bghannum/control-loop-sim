@@ -1,0 +1,3 @@
+# Dev-only tooling, not needed to run the app itself.
+# Used to headlessly screenshot/drive app.py in a browser when verifying UI changes.
+playwright
