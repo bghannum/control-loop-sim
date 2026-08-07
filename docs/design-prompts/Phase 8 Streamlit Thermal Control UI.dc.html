@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:oklch(0.17 0.012 240);}
+*{box-sizing:border-box;}
+</style>
+</helmet>
+<div style="min-height:100vh;padding:48px 0 100px;font-family:'Source Sans 3',system-ui,sans-serif;">
+  <div style="max-width:1680px;margin:0 auto;padding:0 40px;">
+    <div style="margin-bottom:40px;">
+      <h1 style="color:oklch(0.93 0.01 240);font-size:28px;font-weight:700;margin:0 0 8px;">Thermal Control Loop — UI mockups</h1>
+      <p style="color:oklch(0.62 0.015 240);font-size:14px;line-height:1.6;margin:0;max-width:820px;">Streamlit layout redesign. Dark control-room theme, decision log promoted to a top-level tab beside the chart. Every zone below is achievable with <span style="font-family:'JetBrains Mono',monospace;color:oklch(0.75 0.02 240);font-size:12.5px;">st.columns / st.tabs / st.container(border=True) / st.metric / st.dataframe</span> plus light CSS — see the legend at the bottom for per-zone notes.</p>
+    </div>
+
+    <sc-for list="{{states}}" as="st" hint-placeholder-count="2">
+      <div style="margin-bottom:64px;">
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:14px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:oklch(0.17 0.012 240);background:oklch(0.75 0.02 240);border-radius:4px;padding:3px 8px;">{{st.num}}</span>
+          <h2 style="color:oklch(0.9 0.01 240);font-size:17px;font-weight:600;margin:0;">{{st.title}}</h2>
+          <span style="color:oklch(0.55 0.015 240);font-size:13px;">{{st.subtitle}}</span>
+        </div>
+
+        <div style="width:1600px;background:oklch(0.19 0.013 240);border:1px solid rgba(255,255,255,.08);border-radius:10px;overflow:hidden;box-shadow:0 10px 34px rgba(0,0,0,.45);">
+
+          <div style="height:56px;display:flex;align-items:center;gap:12px;padding:0 24px;background:{{st.statusBg}};border-bottom:1px solid rgba(255,255,255,.08);">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:.02em;color:{{st.statusText}};background:{{st.statusChipBg}};border:1px solid {{st.statusText}};border-radius:4px;padding:4px 8px;">{{st.statusCode}}</span>
+            <span style="font-weight:600;font-size:14.5px;color:{{st.statusText}};">{{st.statusMsg}}</span>
+            <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:oklch(0.55 0.015 240 / 0.7);">ZONE A · STATUS STRIP</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:296px 1fr;gap:18px;padding:18px;">
+
+            <div style="display:flex;flex-direction:column;gap:14px;">
+
+              <div style="background:oklch(0.22 0.014 240);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:14px;">
+                <div style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:oklch(0.55 0.015 240);margin-bottom:10px;">ZONE C · CONTROLLER</div>
+                <div style="display:flex;gap:4px;margin-bottom:12px;background:oklch(0.17 0.012 240);border-radius:6px;padding:3px;">
+                  <div style="flex:1;text-align:center;padding:6px 0;border-radius:5px;font-size:12px;font-weight:600;{{st.manualTabStyle}}">Manual</div>
+                  <div style="flex:1;text-align:center;padding:6px 0;border-radius:5px;font-size:12px;font-weight:600;{{st.pidTabStyle}}">PID</div>
+                  <div style="flex:1;text-align:center;padding:6px 0;border-radius:5px;font-size:12px;font-weight:600;{{st.aiTabStyle}}">AI</div>
+                </div>
+                <div style="margin-bottom:12px;">
+                  <div style="display:flex;justify-content:space-between;font-size:11.5px;color:oklch(0.62 0.015 240);margin-bottom:5px;"><span>Setpoint</span><span style="font-family:'JetBrains Mono',monospace;color:oklch(0.88 0.01 240);">{{st.setpoint}}°C</span></div>
+                  <div style="height:5px;border-radius:3px;background:oklch(0.15 0.012 240);position:relative;">
+                    <div style="position:absolute;left:0;top:0;height:5px;border-radius:3px;background:oklch(0.68 0.14 230);width:{{st.setpointPct}}%;"></div>
+                  </div>
+                </div>
+                <div style="min-height:112px;border-top:1px dashed rgba(255,255,255,.08);padding-top:12px;">
+                  <sc-if value="{{st.isManual}}" hint-placeholder-val="{{true}}">
+                    <div style="margin-bottom:10px;">
+                      <div style="display:flex;justify-content:space-between;font-size:11.5px;color:oklch(0.62 0.015 240);margin-bottom:5px;"><span>Heater output</span><span style="font-family:'JetBrains Mono',monospace;color:oklch(0.88 0.01 240);">{{st.heaterPct}}%</span></div>
+                      <div style="height:5px;border-radius:3px;background:oklch(0.15 0.012 240);position:relative;"><div style="position:absolute;left:0;top:0;height:5px;border-radius:3px;background:oklch(0.68 0.18 40);width:{{st.heaterPct}}%;"></div></div>
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                      <span style="font-size:11.5px;color:oklch(0.62 0.015 240);">Override armed</span>
+                      <div style="width:32px;height:18px;border-radius:9px;background:{{st.overrideTrackBg}};position:relative;"><div style="position:absolute;top:2px;{{st.overrideKnobPos}};width:14px;height:14px;border-radius:50%;background:oklch(0.93 0.01 240);"></div></div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{st.isPid}}" hint-placeholder-val="{{false}}">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                      <div><div style="font-size:10px;color:oklch(0.55 0.015 240);">Kp</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:oklch(0.88 0.01 240);background:oklch(0.17 0.012 240);border-radius:4px;padding:5px 6px;margin-top:3px;">{{st.kp}}</div></div>
+                      <div><div style="font-size:10px;color:oklch(0.55 0.015 240);">Ki</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:oklch(0.88 0.01 240);background:oklch(0.17 0.012 240);border-radius:4px;padding:5px 6px;margin-top:3px;">{{st.ki}}</div></div>
+                      <div><div style="font-size:10px;color:oklch(0.55 0.015 240);">Kd</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:oklch(0.88 0.01 240);background:oklch(0.17 0.012 240);border-radius:4px;padding:5px 6px;margin-top:3px;">{{st.kd}}</div></div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{st.isAi}}" hint-placeholder-val="{{false}}">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:oklch(0.19 0.013 240);background:oklch(0.72 0.14 300);border-radius:4px;padding:3px 7px;">AI</span>
+                      <span style="font-size:12px;color:oklch(0.85 0.01 240);">Proposing actuator commands</span>
+                    </div>
+                    <div style="font-size:11.5px;color:oklch(0.62 0.015 240);">Confidence <span style="font-family:'JetBrains Mono',monospace;color:oklch(0.88 0.01 240);">{{st.aiConfidence}}</span> · see Zone G below</div>
+                  </sc-if>
+                </div>
+              </div>
+
+              <div style="background:oklch(0.22 0.014 240);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:14px;">
+                <div style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:oklch(0.55 0.015 240);margin-bottom:10px;">ZONE D · FAULT INJECTION</div>
+                <div style="font-size:11px;color:oklch(0.62 0.015 240);margin-bottom:4px;">Scenario</div>
+                <div style="font-size:12.5px;color:oklch(0.88 0.01 240);background:oklch(0.17 0.012 240);border-radius:5px;padding:7px 9px;margin-bottom:10px;">{{st.faultScenario}}</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                  <span style="font-size:11.5px;color:oklch(0.62 0.015 240);">Drift</span>
+                  <div style="width:32px;height:18px;border-radius:9px;background:{{st.driftTrackBg}};position:relative;"><div style="position:absolute;top:2px;{{st.driftKnobPos}};width:14px;height:14px;border-radius:50%;background:oklch(0.93 0.01 240);"></div></div>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                  <span style="font-size:11.5px;color:oklch(0.62 0.015 240);">Stuck-at</span>
+                  <div style="width:32px;height:18px;border-radius:9px;background:{{st.stuckTrackBg}};position:relative;"><div style="position:absolute;top:2px;{{st.stuckKnobPos}};width:14px;height:14px;border-radius:50%;background:oklch(0.93 0.01 240);"></div></div>
+                </div>
+                <div style="text-align:center;font-size:12px;font-weight:600;color:oklch(0.88 0.01 240);background:oklch(0.17 0.012 240);border-radius:5px;padding:8px;border:1px solid rgba(255,255,255,.08);">Inject spike</div>
+              </div>
+
+              <div style="background:oklch(0.22 0.014 240);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:14px;">
+                <div style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:oklch(0.55 0.015 240);margin-bottom:10px;">ZONE E · SESSION</div>
+                <div style="display:flex;gap:8px;">
+                  <div style="flex:1;text-align:center;font-size:12px;font-weight:600;color:oklch(0.88 0.01 240);background:oklch(0.17 0.012 240);border-radius:5px;padding:8px 4px;border:1px solid rgba(255,255,255,.08);">{{st.runLabel}}</div>
+                  <div style="flex:1;text-align:center;font-size:12px;font-weight:600;color:oklch(0.88 0.01 240);background:oklch(0.17 0.012 240);border-radius:5px;padding:8px 4px;border:1px solid rgba(255,255,255,.08);">Reset</div>
+                </div>
+                <div style="margin-top:8px;text-align:center;font-size:12px;font-weight:600;padding:8px 4px;border-radius:5px;{{st.resetInterlockStyle}}">Reset Interlock</div>
+              </div>
+            </div>
+
+            <div>
+              <div style="display:flex;gap:2px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08);">
+                <div style="padding:9px 18px;font-size:13px;font-weight:600;{{st.liveTabStyle}}">Live</div>
+                <div style="padding:9px 18px;font-size:13px;font-weight:600;{{st.logTabStyle}}">Decision Log</div>
+              </div>
+
+              <sc-if value="{{st.isLiveTab}}" hint-placeholder-val="{{true}}">
+                <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:14px;">
+                  <sc-for list="{{st.tiles}}" as="tile" hint-placeholder-count="7">
+                    <div style="background:oklch(0.22 0.014 240);border:1px solid rgba(255,255,255,.07);border-radius:7px;padding:10px 11px;">
+                      <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:oklch(0.55 0.015 240);margin-bottom:5px;text-transform:uppercase;letter-spacing:.03em;">
+                        <span style="width:6px;height:6px;border-radius:50%;background:{{tile.dot}};flex:none;"></span>{{tile.label}}
+                      </div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;color:oklch(0.9 0.01 240);">{{tile.value}}</div>
+                      <div style="font-size:10px;color:oklch(0.55 0.015 240);margin-top:2px;">{{tile.sub}}</div>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <div style="background:oklch(0.22 0.014 240);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:16px 16px 10px;margin-bottom:14px;">
+                  <div style="display:flex;align-items:center;margin-bottom:8px;">
+                    <span style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:oklch(0.55 0.015 240);">ZONE B · CHART (DOMINANT)</span>
+                    <div style="margin-left:auto;display:flex;gap:14px;font-size:11px;color:oklch(0.7 0.01 240);">
+                      <span><span style="display:inline-block;width:10px;height:2px;background:oklch(0.68 0.18 40);margin-right:5px;vertical-align:middle;"></span>True</span>
+                      <span><span style="display:inline-block;width:10px;height:2px;background:oklch(0.68 0.14 230);margin-right:5px;vertical-align:middle;"></span>Sensed</span>
+                      <span><span style="display:inline-block;width:10px;height:2px;background:oklch(0.55 0.01 240);border-top:2px dashed oklch(0.55 0.01 240);margin-right:5px;vertical-align:middle;"></span>Setpoint</span>
+                    </div>
+                  </div>
+                  <svg viewBox="0 0 1200 300" style="width:100%;height:300px;display:block;">
+                    <line x1="0" y1="150" x2="1200" y2="150" stroke="oklch(0.55 0.01 240)" stroke-width="1.5" stroke-dasharray="6,6"></line>
+                    <sc-if value="{{st.hasData}}" hint-placeholder-val="{{true}}">
+                      <polyline points="{{st.truePoints}}" fill="none" stroke="oklch(0.68 0.18 40)" stroke-width="2.5"></polyline>
+                      <polyline points="{{st.sensedPoints}}" fill="none" stroke="oklch(0.68 0.14 230)" stroke-width="2.5"></polyline>
+                    </sc-if>
+                    <sc-if value="{{st.noData}}" hint-placeholder-val="{{false}}">
+                      <text x="600" y="155" fill="oklch(0.5 0.01 240)" font-size="14" text-anchor="middle" font-family="'Source Sans 3',sans-serif">No data yet — press Run to start</text>
+                    </sc-if>
+                  </svg>
+                </div>
+
+                <sc-if value="{{st.showAiPanel}}" hint-placeholder-val="{{false}}">
+                  <div style="background:oklch(0.22 0.014 240);border:1px solid {{st.aiPanelBorder}};border-radius:8px;padding:14px 16px;">
+                    <div style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:oklch(0.55 0.015 240);margin-bottom:10px;">ZONE G · AI REASONING</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:10px;">
+                      <div><div style="font-size:10.5px;color:oklch(0.55 0.015 240);margin-bottom:3px;">Confidence</div><div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:oklch(0.88 0.01 240);">{{st.aiConfidence}}</div></div>
+                      <div><div style="font-size:10.5px;color:oklch(0.55 0.015 240);margin-bottom:3px;">Sensor concern</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:{{st.aiConcernColor}};">{{st.aiConcernText}}</div></div>
+                    </div>
+                    <div style="font-size:12.5px;color:oklch(0.82 0.01 240);line-height:1.5;font-style:italic;border-left:2px solid rgba(255,255,255,.12);padding-left:10px;margin-bottom:10px;">"{{st.aiRationale}}"</div>
+                    <sc-if value="{{st.aiStatusVisible}}" hint-placeholder-val="{{false}}">
+                      <div style="font-size:12px;font-weight:600;color:{{st.aiStatusColor}};background:{{st.aiStatusBg}};border-radius:5px;padding:8px 10px;">{{st.aiStatusText}}</div>
+                    </sc-if>
+                  </div>
+                </sc-if>
+              </sc-if>
+
+              <sc-if value="{{st.isLogTab}}" hint-placeholder-val="{{false}}">
+                <div style="background:oklch(0.22 0.014 240);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:16px;">
+                  <div style="display:flex;align-items:center;margin-bottom:12px;">
+                    <span style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:oklch(0.55 0.015 240);">ZONE H · DECISION LOG</span>
+                    <label style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:oklch(0.7 0.01 240);">
+                      <span style="width:13px;height:13px;border:1px solid oklch(0.55 0.015 240);border-radius:3px;display:inline-block;"></span>Show full history
+                    </label>
+                  </div>
+                  <div style="display:grid;grid-template-columns:56px 70px 70px 100px 1fr 76px 76px 120px;gap:0;font-size:10.5px;font-weight:700;letter-spacing:.03em;color:oklch(0.55 0.015 240);padding:0 10px 8px;border-bottom:1px solid rgba(255,255,255,.08);">
+                    <div>TICK</div><div>SOURCE</div><div>OUTPUT</div><div>RESULT</div><div>REASON</div><div>OVERRIDE</div><div>LOCKED</div><div>DETECTOR</div>
+                  </div>
+                  <sc-for list="{{st.logRows}}" as="row" hint-placeholder-count="6">
+                    <div style="display:grid;grid-template-columns:56px 70px 70px 100px 1fr 76px 76px 120px;gap:0;align-items:center;font-size:12px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.04);background:{{row.rowBg}};">
+                      <div style="font-family:'JetBrains Mono',monospace;color:oklch(0.7 0.01 240);">{{row.tick}}</div>
+                      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:700;color:{{row.sourceColor}};">{{row.source}}</div>
+                      <div style="font-family:'JetBrains Mono',monospace;color:oklch(0.85 0.01 240);">{{row.output}}</div>
+                      <div><span style="font-size:10.5px;font-weight:700;color:{{row.resultColor}};background:{{row.resultBg}};border-radius:4px;padding:3px 7px;">{{row.result}}</span></div>
+                      <div style="color:oklch(0.75 0.01 240);">{{row.reason}}</div>
+                      <div style="color:oklch(0.6 0.01 240);">{{row.override}}</div>
+                      <div style="color:oklch(0.6 0.01 240);">{{row.lockout}}</div>
+                      <div style="color:oklch(0.6 0.01 240);font-size:11px;">{{row.flags}}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+
+    <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:32px;">
+      <h2 style="color:oklch(0.9 0.01 240);font-size:18px;font-weight:700;margin:0 0 16px;">Legend &amp; Streamlit achievability</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
+        <div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:.04em;color:oklch(0.55 0.015 240);margin-bottom:10px;">SEVERITY COLOR</div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:oklch(0.82 0.01 240);">
+            <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:oklch(0.72 0.17 145);margin-right:8px;"></span>Green — nominal / allowed</div>
+            <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:oklch(0.78 0.15 70);margin-right:8px;"></span>Amber — degraded / warning (AI waiting, trip strike, override armed)</div>
+            <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:oklch(0.65 0.19 25);margin-right:8px;"></span>Red — critical (lockout, hard trip, AI fallback, override active, rejected)</div>
+            <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:oklch(0.55 0.01 240);margin-right:8px;"></span>Gray — inactive / no data</div>
+          </div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:.04em;color:oklch(0.55 0.015 240);margin:18px 0 10px;">SOURCE / RESULT CODES</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11px;color:oklch(0.82 0.01 240);">
+            <span style="font-family:'JetBrains Mono',monospace;font-weight:700;background:oklch(0.22 0.014 240);border-radius:4px;padding:4px 8px;">MAN / PID / AI — command source</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-weight:700;background:oklch(0.22 0.014 240);border-radius:4px;padding:4px 8px;">ALLOWED / CLAMPED / REJECTED / OVERRIDDEN — interlock result</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;letter-spacing:.04em;color:oklch(0.55 0.015 240);margin-bottom:10px;">ZONE → STREAMLIT PRIMITIVE</div>
+          <div style="display:flex;flex-direction:column;gap:7px;font-size:12.5px;color:oklch(0.78 0.01 240);line-height:1.5;">
+            <div><b style="color:oklch(0.9 0.01 240);">A · Status strip</b> — <span style="font-family:'JetBrains Mono',monospace;font-size:11px;">st.container(border=True)</span> full-width, fixed height, colored via <span style="font-family:'JetBrains Mono',monospace;font-size:11px;">st.markdown(unsafe_allow_html)</span>; renders every rerun so height never collapses.</div>
+            <div><b style="color:oklch(0.9 0.01 240);">B · Chart</b> — Altair/Plotly chart via <span style="font-family:'JetBrains Mono',monospace;font-size:11px;">st.altair_chart</span>, sized to dominate the right column.</div>
+            <div><b style="color:oklch(0.9 0.01 240);">C/D/E · Left rail</b> — <span style="font-family:'JetBrains Mono',monospace;font-size:11px;">st.columns</span> + three <span style="font-family:'JetBrains Mono',monospace;font-size:11px;">st.container(border=True)</span> cards; mode box uses fixed min-height CSS so switching modes doesn't resize the card.</div>
+            <div><b style="color:oklch(0.9 0.01 240);">F · Telemetry tiles</b> — grid of <span style="font-family:'JetBrains Mono',monospace;font-size:11px;">st.columns</span>, each holding one <span style="font-family:'JetBrains Mono',monospace;font-size:11px;">st.metric</span> styled with CSS.</div>
+            <div><b style="color:oklch(0.9 0.01 240);">G · AI panel</b> — its own <span style="font-family:'JetBrains Mono',monospace;font-size:11px;">st.container(border=True)</span>, conditionally rendered only in AI mode; sits below the chart so its appearance never shifts C–F.</div>
+            <div><b style="color:oklch(0.9 0.01 240);">H · Decision log</b> — <span style="font-family:'JetBrains Mono',monospace;font-size:11px;">st.tabs(["Live","Decision Log"])</span> at the top of the right column; log itself is <span style="font-family:'JetBrains Mono',monospace;font-size:11px;">st.dataframe</span> with a pandas Styler applying row background by result. All within reach: no custom JS, no fixed/sticky positioning.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const GREEN='oklch(0.72 0.17 145)', GREEN_BG='oklch(0.72 0.17 145 / 0.14)';
+const AMBER='oklch(0.78 0.15 70)', AMBER_BG='oklch(0.78 0.15 70 / 0.14)';
+const RED='oklch(0.65 0.19 25)', RED_BG='oklch(0.65 0.19 25 / 0.14)';
+const GRAY='oklch(0.55 0.01 240)', GRAY_BG='oklch(0.55 0.01 240 / 0.12)';
+const ACTIVE_TAB='background:oklch(0.6 0.14 230 / 0.18);color:oklch(0.75 0.13 230);';
+const IDLE_TAB='color:oklch(0.55 0.015 240);';
+const LIVE_TAB_ON='color:oklch(0.9 0.01 240);border-bottom:2px solid oklch(0.68 0.14 230);margin-bottom:-1px;';
+const LIVE_TAB_OFF='color:oklch(0.5 0.015 240);border-bottom:2px solid transparent;margin-bottom:-1px;';
+
+const X=[0,120,240,360,480,600,720,840,960,1080,1200];
+function pts(ys){ return X.map((x,i)=>x+','+ys[i]).join(' '); }
+
+function tiles(o){
+  const d=(v)=>v?({green:GREEN,amber:AMBER,red:RED,gray:GRAY}[v]):GRAY;
+  return [
+    {label:'True temp', value:o.trueTemp, sub:'ground truth', dot:GRAY},
+    {label:'Sensed temp', value:o.sensedTemp, sub:o.sensedSub||'reported', dot:d(o.sensedSev)},
+    {label:'Actuator', value:o.actuator, sub:'heater output', dot:GRAY},
+    {label:'Active faults', value:o.activeFaults, sub:'ground truth', dot:d(o.faultSev)},
+    {label:'Detector flags', value:o.detectorFlags, sub:'Tier-1 belief', dot:d(o.detectorSev)},
+    {label:'Historian', value:o.historian, sub:'logging status', dot:d(o.historianSev||'green')},
+    {label:'Trip strikes', value:o.tripStrikes, sub:o.tripSub||'of 3 before lockout', dot:d(o.tripSev)},
+  ];
+}
+
+function logRow(tick,source,output,result,reason,override,lockout,flags,sev){
+  const sc={MAN:'oklch(0.68 0.02 240)',PID:'oklch(0.68 0.14 230)',AI:'oklch(0.72 0.14 300)'}[source];
+  const rc={green:GREEN,amber:AMBER,red:RED,gray:GRAY}[sev];
+  const rb={green:GREEN_BG,amber:AMBER_BG,red:RED_BG,gray:GRAY_BG}[sev];
+  return {tick,source,output,result,reason,override,lockout,flags,sourceColor:sc,resultColor:rc,resultBg:rb,rowBg: sev==='red'?RED_BG: sev==='amber'?AMBER_BG:'transparent'};
+}
+
+function baseLog(mode, top){
+  const src = mode==='ai'?'AI':mode==='pid'?'PID':'MAN';
+  const rows=[top];
+  for(let i=0;i<5;i++){
+    rows.push(logRow(top.tick-1-i, src, (40+i*3)+'%','ALLOWED','within bounds','N','N','none','green'));
+  }
+  return rows;
+}
+
+class Component extends DCLogic {
+  renderVals(){
+    const S=[];
+
+    // 1. Idle
+    S.push({
+      num:'01', title:'Idle', subtitle:'before Run is ever pressed',
+      statusBg:GREEN_BG, statusText:GREEN, statusMsg:'System nominal', statusChipBg:'transparent', statusCode:'NOMINAL',
+      isManual:true, isPid:false, isAi:false,
+      manualTabStyle:ACTIVE_TAB, pidTabStyle:IDLE_TAB, aiTabStyle:IDLE_TAB,
+      setpoint:'50.0', setpointPct:50, heaterPct:0, overrideTrackBg:'oklch(0.15 0.012 240)', overrideKnobPos:'left:2px',
+      faultScenario:'None', driftTrackBg:'oklch(0.15 0.012 240)', driftKnobPos:'left:2px', stuckTrackBg:'oklch(0.15 0.012 240)', stuckKnobPos:'left:2px',
+      runLabel:'Run', resetInterlockStyle:'color:oklch(0.55 0.015 240);background:oklch(0.17 0.012 240);border:1px solid rgba(255,255,255,.08);',
+      isLiveTab:true, isLogTab:false, liveTabStyle:LIVE_TAB_ON, logTabStyle:LIVE_TAB_OFF,
+      tiles: tiles({trueTemp:'—',sensedTemp:'—',actuator:'—',activeFaults:'none',detectorFlags:'none',historian:'idle',tripStrikes:'0',tripSev:'gray',detectorSev:'gray',faultSev:'gray',sensedSev:'gray',historianSev:'gray'}),
+      hasData:false, noData:true, truePoints:'', sensedPoints:'',
+      showAiPanel:false,
+      logRows: [logRow(0,'MAN','0%','ALLOWED','no session yet','N','N','none','gray')],
+    });
+
+    // 2. Manual nominal
+    S.push({
+      num:'02', title:'Manual mode, nominal', subtitle:'heater mid-range, tracking toward setpoint',
+      statusBg:GREEN_BG, statusText:GREEN, statusMsg:'System nominal', statusChipBg:'transparent', statusCode:'NOMINAL',
+      isManual:true, isPid:false, isAi:false,
+      manualTabStyle:ACTIVE_TAB, pidTabStyle:IDLE_TAB, aiTabStyle:IDLE_TAB,
+      setpoint:'55.0', setpointPct:55, heaterPct:58, overrideTrackBg:'oklch(0.15 0.012 240)', overrideKnobPos:'left:2px',
+      faultScenario:'None', driftTrackBg:'oklch(0.15 0.012 240)', driftKnobPos:'left:2px', stuckTrackBg:'oklch(0.15 0.012 240)', stuckKnobPos:'left:2px',
+      runLabel:'Pause', resetInterlockStyle:'color:oklch(0.55 0.015 240);background:oklch(0.17 0.012 240);border:1px solid rgba(255,255,255,.08);',
+      isLiveTab:true, isLogTab:false, liveTabStyle:LIVE_TAB_ON, logTabStyle:LIVE_TAB_OFF,
+      tiles: tiles({trueTemp:'54.8°',sensedTemp:'54.9°',actuator:'58%',activeFaults:'none',detectorFlags:'none',historian:'connected',tripStrikes:'0',tripSev:'green',detectorSev:'green',faultSev:'green',sensedSev:'green',historianSev:'green'}),
+      hasData:true, noData:false, truePoints: pts([260,240,205,182,166,158,152,150,150,150,150]), sensedPoints: pts([258,238,208,184,168,159,153,151,150,150,150]),
+      showAiPanel:false,
+      logRows: baseLog('manual', logRow(212,'MAN','58%','ALLOWED','within bounds','N','N','none','green')),
+    });
+
+    // 3. PID nominal
+    S.push({
+      num:'03', title:'PID mode, nominal', subtitle:'settled near setpoint, small steady-state oscillation',
+      statusBg:GREEN_BG, statusText:GREEN, statusMsg:'System nominal', statusChipBg:'transparent', statusCode:'NOMINAL',
+      isManual:false, isPid:true, isAi:false,
+      manualTabStyle:IDLE_TAB, pidTabStyle:ACTIVE_TAB, aiTabStyle:IDLE_TAB,
+      setpoint:'55.0', setpointPct:55, kp:'2.40', ki:'0.35', kd:'0.80',
+      faultScenario:'None', driftTrackBg:'oklch(0.15 0.012 240)', driftKnobPos:'left:2px', stuckTrackBg:'oklch(0.15 0.012 240)', stuckKnobPos:'left:2px',
+      runLabel:'Pause', resetInterlockStyle:'color:oklch(0.55 0.015 240);background:oklch(0.17 0.012 240);border:1px solid rgba(255,255,255,.08);',
+      isLiveTab:true, isLogTab:false, liveTabStyle:LIVE_TAB_ON, logTabStyle:LIVE_TAB_OFF,
+      tiles: tiles({trueTemp:'55.2°',sensedTemp:'54.9°',actuator:'46%',activeFaults:'none',detectorFlags:'none',historian:'connected',tripStrikes:'0',tripSev:'green',detectorSev:'green',faultSev:'green',sensedSev:'green',historianSev:'green'}),
+      hasData:true, noData:false, truePoints: pts([200,172,148,162,142,154,148,152,148,151,150]), sensedPoints: pts([198,170,150,160,144,153,149,151,149,150,150]),
+      showAiPanel:false,
+      logRows: baseLog('pid', logRow(340,'PID','46%','ALLOWED','within bounds','N','N','none','green')),
+    });
+
+    // 4. AI nominal
+    S.push({
+      num:'04', title:'AI mode, nominal', subtitle:'Zone G populated with rationale + confidence',
+      statusBg:GREEN_BG, statusText:GREEN, statusMsg:'System nominal', statusChipBg:'transparent', statusCode:'NOMINAL',
+      isManual:false, isPid:false, isAi:true,
+      manualTabStyle:IDLE_TAB, pidTabStyle:IDLE_TAB, aiTabStyle:ACTIVE_TAB,
+      setpoint:'55.0', setpointPct:55, aiConfidence:'0.91',
+      faultScenario:'None', driftTrackBg:'oklch(0.15 0.012 240)', driftKnobPos:'left:2px', stuckTrackBg:'oklch(0.15 0.012 240)', stuckKnobPos:'left:2px',
+      runLabel:'Pause', resetInterlockStyle:'color:oklch(0.55 0.015 240);background:oklch(0.17 0.012 240);border:1px solid rgba(255,255,255,.08);',
+      isLiveTab:true, isLogTab:false, liveTabStyle:LIVE_TAB_ON, logTabStyle:LIVE_TAB_OFF,
+      tiles: tiles({trueTemp:'55.1°',sensedTemp:'55.0°',actuator:'44%',activeFaults:'none',detectorFlags:'none',historian:'connected',tripStrikes:'0',tripSev:'green',detectorSev:'green',faultSev:'green',sensedSev:'green',historianSev:'green'}),
+      hasData:true, noData:false, truePoints: pts([230,205,180,162,152,150,150,151,149,150,150]), sensedPoints: pts([228,203,182,160,153,151,149,152,148,150,150]),
+      showAiPanel:true, aiPanelBorder:'rgba(255,255,255,.07)', aiConcernColor:GREEN, aiConcernText:'None',
+      aiRationale:'Sensed temp 55.0°C is within 0.2° of setpoint; holding output near steady-state estimate of 44%.',
+      aiStatusVisible:false,
+      logRows: baseLog('ai', logRow(418,'AI','44%','ALLOWED','within bounds','N','N','none','green')),
+    });
+
+    // 5. AI degraded
+    S.push({
+      num:'05', title:'AI mode, degraded', subtitle:'no valid response in >10s — Zone A still nominal',
+      statusBg:GREEN_BG, statusText:GREEN, statusMsg:'System nominal', statusChipBg:'transparent', statusCode:'NOMINAL',
+      isManual:false, isPid:false, isAi:true,
+      manualTabStyle:IDLE_TAB, pidTabStyle:IDLE_TAB, aiTabStyle:ACTIVE_TAB,
+      setpoint:'55.0', setpointPct:55, aiConfidence:'—',
+      faultScenario:'None', driftTrackBg:'oklch(0.15 0.012 240)', driftKnobPos:'left:2px', stuckTrackBg:'oklch(0.15 0.012 240)', stuckKnobPos:'left:2px',
+      runLabel:'Pause', resetInterlockStyle:'color:oklch(0.55 0.015 240);background:oklch(0.17 0.012 240);border:1px solid rgba(255,255,255,.08);',
+      isLiveTab:true, isLogTab:false, liveTabStyle:LIVE_TAB_ON, logTabStyle:LIVE_TAB_OFF,
+      tiles: tiles({trueTemp:'52.4°',sensedTemp:'52.6°',actuator:'44%',activeFaults:'none',detectorFlags:'none',historian:'connected',tripStrikes:'0',tripSev:'amber',detectorSev:'green',faultSev:'green',sensedSev:'green',historianSev:'green'}),
+      hasData:true, noData:false, truePoints: pts([230,205,180,162,152,150,150,151,149,155,168]), sensedPoints: pts([228,203,182,160,153,151,149,152,148,153,166]),
+      showAiPanel:true, aiPanelBorder:AMBER, aiConcernColor:GREEN, aiConcernText:'None',
+      aiRationale:'Last valid proposal at tick 601. Holding previous output while awaiting response.',
+      aiStatusVisible:true, aiStatusColor:AMBER, aiStatusBg:AMBER_BG, aiStatusText:'No response for 11s — falling back to PID in 4s if unresolved',
+      logRows: baseLog('ai', logRow(612,'AI','—','ALLOWED','no proposal — holding last output','N','N','none','amber')),
+    });
+
+    // 6. AI fallback active
+    S.push({
+      num:'06', title:'AI mode, fallback active', subtitle:'Zone A shows the AI-fallback critical state',
+      statusBg:RED_BG, statusText:RED, statusMsg:'AI fallback active — PID controlling', statusChipBg:'transparent', statusCode:'AI FALLBACK',
+      isManual:false, isPid:false, isAi:true,
+      manualTabStyle:IDLE_TAB, pidTabStyle:IDLE_TAB, aiTabStyle:ACTIVE_TAB,
+      setpoint:'55.0', setpointPct:55, aiConfidence:'—',
+      faultScenario:'None', driftTrackBg:'oklch(0.15 0.012 240)', driftKnobPos:'left:2px', stuckTrackBg:'oklch(0.15 0.012 240)', stuckKnobPos:'left:2px',
+      runLabel:'Pause', resetInterlockStyle:'color:oklch(0.55 0.015 240);background:oklch(0.17 0.012 240);border:1px solid rgba(255,255,255,.08);',
+      isLiveTab:true, isLogTab:false, liveTabStyle:LIVE_TAB_ON, logTabStyle:LIVE_TAB_OFF,
+      tiles: tiles({trueTemp:'50.1°',sensedTemp:'50.3°',actuator:'62%',activeFaults:'none',detectorFlags:'none',historian:'connected',tripStrikes:'0',tripSev:'green',detectorSev:'green',faultSev:'green',sensedSev:'green',historianSev:'green'}),
+      hasData:true, noData:false, truePoints: pts([230,205,180,162,152,150,150,151,149,150,140]), sensedPoints: pts([228,203,182,160,153,151,149,152,148,150,138]),
+      showAiPanel:true, aiPanelBorder:RED, aiConcernColor:GREEN, aiConcernText:'None',
+      aiRationale:'No valid AI response for 15s. Control handed to PID fallback controller.',
+      aiStatusVisible:true, aiStatusColor:RED, aiStatusBg:RED_BG, aiStatusText:'AI FALLBACK ACTIVE — PID controlling actuator until AI recovers',
+      logRows: baseLog('ai', logRow(631,'PID','62%','ALLOWED','fallback controller — AI unresponsive 15s','N','N','none','red')),
+    });
+
+    // 7. Sensor fault stuck-at
+    S.push({
+      num:'07', title:'Sensor fault active (stuck-at)', subtitle:'sensed frozen while true diverges underneath',
+      statusBg:GREEN_BG, statusText:GREEN, statusMsg:'System nominal', statusChipBg:'transparent', statusCode:'NOMINAL',
+      isManual:false, isPid:true, isAi:false,
+      manualTabStyle:IDLE_TAB, pidTabStyle:ACTIVE_TAB, aiTabStyle:IDLE_TAB,
+      setpoint:'55.0', setpointPct:55, kp:'2.40', ki:'0.35', kd:'0.80',
+      faultScenario:'Stuck-at (sensor freezes at 57.4°)', driftTrackBg:'oklch(0.15 0.012 240)', driftKnobPos:'left:2px', stuckTrackBg:GREEN, stuckKnobPos:'left:16px',
+      runLabel:'Pause', resetInterlockStyle:'color:oklch(0.55 0.015 240);background:oklch(0.17 0.012 240);border:1px solid rgba(255,255,255,.08);',
+      isLiveTab:true, isLogTab:false, liveTabStyle:LIVE_TAB_ON, logTabStyle:LIVE_TAB_OFF,
+      tiles: tiles({trueTemp:'68.5°',sensedTemp:'57.4°',sensedSub:'frozen 40 ticks',actuator:'71%',activeFaults:'stuck-at',detectorFlags:'stuck-at',historian:'connected',tripStrikes:'0',tripSev:'green',detectorSev:'amber',faultSev:'amber',sensedSev:'amber',historianSev:'green'}),
+      hasData:true, noData:false, truePoints: pts([190,168,150,132,108,86,66,52,42,36,34]), sensedPoints: pts([190,168,150,150,150,150,150,150,150,150,150]),
+      showAiPanel:false,
+      logRows: baseLog('pid', logRow(475,'PID','71%','ALLOWED','sensed within bounds (detector: stuck-at suspected)','N','N','stuck-at','amber')),
+    });
+
+    // 8. Interlock reject/clamp
+    S.push({
+      num:'08', title:'Interlock reject / clamp', subtitle:'newest log row rejected — a single rejection is not itself an alert',
+      statusBg:GREEN_BG, statusText:GREEN, statusMsg:'System nominal', statusChipBg:'transparent', statusCode:'NOMINAL',
+      isManual:false, isPid:false, isAi:true,
+      manualTabStyle:IDLE_TAB, pidTabStyle:IDLE_TAB, aiTabStyle:ACTIVE_TAB,
+      setpoint:'55.0', setpointPct:55, aiConfidence:'0.78',
+      faultScenario:'None', driftTrackBg:'oklch(0.15 0.012 240)', driftKnobPos:'left:2px', stuckTrackBg:'oklch(0.15 0.012 240)', stuckKnobPos:'left:2px',
+      runLabel:'Pause', resetInterlockStyle:'color:oklch(0.55 0.015 240);background:oklch(0.17 0.012 240);border:1px solid rgba(255,255,255,.08);',
+      isLiveTab:false, isLogTab:true, liveTabStyle:LIVE_TAB_OFF, logTabStyle:LIVE_TAB_ON,
+      tiles: tiles({trueTemp:'55.3°',sensedTemp:'55.1°',actuator:'40%',activeFaults:'none',detectorFlags:'none',historian:'connected',tripStrikes:'0',tripSev:'green',detectorSev:'green',faultSev:'green',sensedSev:'green',historianSev:'green'}),
+      hasData:true, noData:false, truePoints: pts([220,192,167,151,149,151,153,141,151,151,151]), sensedPoints: pts([222,194,169,150,148,150,152,140,150,150,150]),
+      showAiPanel:false,
+      logRows: [
+        logRow(733,'AI','95%','REJECTED','proposed output exceeds max-rate-of-change margin','N','N','none','red'),
+        logRow(732,'AI','40%','ALLOWED','within bounds','N','N','none','green'),
+        logRow(731,'AI','38%','ALLOWED','within bounds','N','N','none','green'),
+        logRow(730,'AI','41%','ALLOWED','within bounds','N','N','none','green'),
+        logRow(729,'AI','39%','ALLOWED','within bounds','N','N','none','green'),
+        logRow(728,'AI','40%','ALLOWED','within bounds','N','N','none','green'),
+      ],
+    });
+
+    // 9. Hard trip firing
+    S.push({
+      num:'09', title:'Hard trip firing', subtitle:'sensed at/past ceiling — actuator forced to 0% regardless of source',
+      statusBg:RED_BG, statusText:RED, statusMsg:'Hard trip firing — actuator forced to 0%', statusChipBg:'transparent', statusCode:'HARD TRIP',
+      isManual:false, isPid:true, isAi:false,
+      manualTabStyle:IDLE_TAB, pidTabStyle:ACTIVE_TAB, aiTabStyle:IDLE_TAB,
+      setpoint:'55.0', setpointPct:55, kp:'2.40', ki:'0.35', kd:'0.80',
+      faultScenario:'Spike (injected)', driftTrackBg:'oklch(0.15 0.012 240)', driftKnobPos:'left:2px', stuckTrackBg:'oklch(0.15 0.012 240)', stuckKnobPos:'left:2px',
+      runLabel:'Pause', resetInterlockStyle:'color:oklch(0.55 0.015 240);background:oklch(0.17 0.012 240);border:1px solid rgba(255,255,255,.08);',
+      isLiveTab:true, isLogTab:false, liveTabStyle:LIVE_TAB_ON, logTabStyle:LIVE_TAB_OFF,
+      tiles: tiles({trueTemp:'79.8°',sensedTemp:'80.0°',actuator:'0%',activeFaults:'spike',detectorFlags:'spike',historian:'connected',tripStrikes:'1',tripSev:'red',detectorSev:'red',faultSev:'red',sensedSev:'red',historianSev:'green'}),
+      hasData:true, noData:false, truePoints: pts([150,145,130,110,85,60,40,28,22,20,32]), sensedPoints: pts([150,140,120,95,70,45,30,25,22,20,35]),
+      showAiPanel:false,
+      logRows: [
+        logRow(902,'PID','0%','ALLOWED','hard trip: actuator forced to 0%','N','N','spike','red'),
+        logRow(901,'PID','0%','CLAMPED','hard trip: proposed 61% clamped to 0%','N','N','spike','red'),
+        logRow(900,'PID','58%','ALLOWED','ceiling breach imminent','N','N','spike','amber'),
+        logRow(899,'PID','55%','ALLOWED','within bounds','N','N','spike','amber'),
+        logRow(898,'PID','52%','ALLOWED','within bounds','N','N','none','green'),
+        logRow(897,'PID','50%','ALLOWED','within bounds','N','N','none','green'),
+      ],
+    });
+
+    // 10. Locked out
+    S.push({
+      num:'10', title:'Locked out', subtitle:'repeated trip episodes without correction — Reset Interlock is the obviously-relevant action',
+      statusBg:RED_BG, statusText:RED, statusMsg:'Locked out — repeated trips without correction', statusChipBg:'transparent', statusCode:'LOCKED OUT',
+      isManual:false, isPid:true, isAi:false,
+      manualTabStyle:IDLE_TAB, pidTabStyle:ACTIVE_TAB, aiTabStyle:IDLE_TAB,
+      setpoint:'55.0', setpointPct:55, kp:'2.40', ki:'0.35', kd:'0.80',
+      faultScenario:'Spike (injected, repeated)', driftTrackBg:'oklch(0.15 0.012 240)', driftKnobPos:'left:2px', stuckTrackBg:'oklch(0.15 0.012 240)', stuckKnobPos:'left:2px',
+      runLabel:'Pause', resetInterlockStyle:'color:'+RED+';background:'+RED_BG+';border:1px solid '+RED+';',
+      isLiveTab:true, isLogTab:false, liveTabStyle:LIVE_TAB_ON, logTabStyle:LIVE_TAB_OFF,
+      tiles: tiles({trueTemp:'62.0°',sensedTemp:'63.4°',actuator:'0% (locked)',activeFaults:'spike',detectorFlags:'spike',historian:'connected',tripStrikes:'3',tripSub:'lockout threshold',tripSev:'red',detectorSev:'red',faultSev:'red',sensedSev:'red',historianSev:'green'}),
+      hasData:true, noData:false, truePoints: pts([155,115,65,30,65,115,155,95,45,27,85]), sensedPoints: pts([150,110,60,25,60,110,150,90,40,22,80]),
+      showAiPanel:false,
+      logRows: [
+        logRow(1140,'PID','0%','ALLOWED','LOCKED OUT — 3rd trip without correction','N','Y','spike','red'),
+        logRow(1139,'PID','0%','CLAMPED','hard trip 3 of 3 — lockout engaged','N','Y','spike','red'),
+        logRow(1138,'PID','0%','CLAMPED','hard trip 2 of 3','N','N','spike','red'),
+        logRow(1137,'PID','0%','CLAMPED','hard trip 1 of 3','N','N','spike','red'),
+        logRow(1136,'PID','54%','ALLOWED','within bounds','N','N','none','green'),
+        logRow(1135,'PID','51%','ALLOWED','within bounds','N','N','none','green'),
+      ],
+    });
+
+    // 11. Manual override active
+    S.push({
+      num:'11', title:'Manual override active', subtitle:'operator armed and triggered past a bounds rejection — distinct from lockout/hard trip',
+      statusBg:RED_BG, statusText:RED, statusMsg:'Manual override active', statusChipBg:'transparent', statusCode:'OVERRIDE ACTIVE',
+      isManual:true, isPid:false, isAi:false,
+      manualTabStyle:ACTIVE_TAB, pidTabStyle:IDLE_TAB, aiTabStyle:IDLE_TAB,
+      setpoint:'55.0', setpointPct:55, heaterPct:85, overrideTrackBg:RED, overrideKnobPos:'left:16px',
+      faultScenario:'None', driftTrackBg:'oklch(0.15 0.012 240)', driftKnobPos:'left:2px', stuckTrackBg:'oklch(0.15 0.012 240)', stuckKnobPos:'left:2px',
+      runLabel:'Pause', resetInterlockStyle:'color:oklch(0.55 0.015 240);background:oklch(0.17 0.012 240);border:1px solid rgba(255,255,255,.08);',
+      isLiveTab:true, isLogTab:false, liveTabStyle:LIVE_TAB_ON, logTabStyle:LIVE_TAB_OFF,
+      tiles: tiles({trueTemp:'70.2°',sensedTemp:'70.5°',actuator:'85% (override)',activeFaults:'none',detectorFlags:'none',historian:'connected',tripStrikes:'0',tripSev:'green',detectorSev:'green',faultSev:'green',sensedSev:'amber',historianSev:'green'}),
+      hasData:true, noData:false, truePoints: pts([225,195,170,152,152,150,150,125,95,75,63]), sensedPoints: pts([220,190,165,148,150,150,150,120,90,70,60]),
+      showAiPanel:false,
+      logRows: [
+        logRow(1288,'MAN','85%','OVERRIDDEN','operator override — exceeds soft-bound rejection','Y','N','none','red'),
+        logRow(1287,'MAN','85%','REJECTED','proposed output exceeds soft bound (75%)','N','N','none','amber'),
+        logRow(1286,'MAN','70%','ALLOWED','within bounds','N','N','none','green'),
+        logRow(1285,'MAN','68%','ALLOWED','within bounds','N','N','none','green'),
+        logRow(1284,'MAN','65%','ALLOWED','within bounds','N','N','none','green'),
+        logRow(1283,'MAN','60%','ALLOWED','within bounds','N','N','none','green'),
+      ],
+    });
+
+    return { states: S };
+  }
+}
+
+</script>
+</body>
+</html>
