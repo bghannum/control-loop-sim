@@ -63,6 +63,13 @@ ai:
   fallback_after_s: 10       # dead-man timer stage 2: additional grace after the warning before auto-fallback fires
   safe_output_pct: 0.0        # dead-man timer stage 3: safe default this system falls back to (no active cooling -- off is safe)
 
+# Used starting Phase 7 (Tier-2 LLM triage). Manual/on-demand only, by design --
+# see CLAUDE.md's Phase 7 section for the cost-control reasoning.
+triage:
+  model: claude-sonnet-5
+  history_window_ticks: 20
+  max_wait_s: 15
+
 # Used starting Phase 3 (sensor fault injection)
 sensor:
   noise_sigma_k: 0.15       # baseline Gaussian noise, always present

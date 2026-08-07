@@ -11,53 +11,7 @@ import threading
 import pytest
 
 from engine.controllers.ai import AIController
-from tests.conftest import FakeClock
-
-
-class FakeToolUseBlock:
-    type = "tool_use"
-
-    def __init__(self, input_dict):
-        self.input = input_dict
-
-
-class FakeTextBlock:
-    type = "text"
-
-    def __init__(self, text):
-        self.text = text
-
-
-class FakeResponse:
-    def __init__(self, content):
-        self.content = content
-
-
-class FakeMessages:
-    def __init__(self, client):
-        self._client = client
-
-    def create(self, **kwargs):
-        return self._client._create(**kwargs)
-
-
-class FakeClient:
-    """behaviors: list of callables (return a FakeResponse or raise) consumed
-    one per call, in order. Once exhausted, the last one repeats -- propose()
-    eagerly starts a new background call right after consuming any result
-    (so the AI is always working on the next decision, by design), so a
-    test that only cares about a single specific result would otherwise see
-    that eager follow-up call hit an empty queue and raise IndexError."""
-
-    def __init__(self, behaviors):
-        self.messages = FakeMessages(self)
-        self._behaviors = list(behaviors)
-        self.calls: list[dict] = []
-
-    def _create(self, **kwargs):
-        self.calls.append(kwargs)
-        behavior = self._behaviors.pop(0) if len(self._behaviors) > 1 else self._behaviors[0]
-        return behavior()
+from tests.conftest import FakeClient, FakeClock, FakeResponse, FakeTextBlock, FakeToolUseBlock
 
 
 def valid_response(**overrides):

@@ -36,28 +36,14 @@ type name reach `ProposedAction.metadata["last_error"]`.
 import logging
 import threading
 import time
-from typing import Any, Literal, Protocol
+from typing import Literal
 
 from pydantic import BaseModel, ValidationError
 
+from engine.anthropic_support import AnthropicClientLike, summarize_error
 from engine.controllers.base import Controller, ProposedAction
 
 logger = logging.getLogger(__name__)
-
-
-class _AnthropicMessages(Protocol):
-    def create(self, **kwargs: Any) -> Any: ...
-
-
-class AnthropicClientLike(Protocol):
-    """Structural shape of the only part of the Anthropic client actually
-    used here: `.messages.create(...)`. Lets `client` be meaningfully typed
-    (IDE/mypy support) without hard-depending on the real `anthropic`
-    package's concrete class -- the fake client used in tests satisfies
-    this structurally, no inheritance needed, since Protocol matching is
-    duck-typed."""
-
-    messages: _AnthropicMessages
 
 
 TOOL_NAME = "propose_heater_output"
@@ -92,17 +78,6 @@ class AIProposalSchema(BaseModel):
     confidence: Literal["low", "medium", "high"]
     rationale: str
     flagged_sensor_concern: bool
-
-
-def _summarize_error(exc: Exception) -> str:
-    """A short, UI-safe summary. Our own raised RuntimeError/ValueError
-    messages are already descriptive and contain nothing sensitive, so
-    those are shown in full; anything else (network/API client errors,
-    whose text we don't control) is reduced to just its type name --
-    the full exception is always logged separately, with a traceback."""
-    if isinstance(exc, (RuntimeError, ValueError)):
-        return str(exc)
-    return f"{type(exc).__name__} (see server log for details)"
 
 
 def _build_prompt(reading: float, setpoint: float, history: list[dict], detector_flags: dict) -> str:
@@ -217,7 +192,7 @@ class AIController(Controller):
         except Exception as exc:
             logger.warning("AI controller call failed", exc_info=True)
             with self._result_lock:
-                self._pending_result = {"success": False, "error": _summarize_error(exc)}
+                self._pending_result = {"success": False, "error": summarize_error(exc)}
 
     def _request_decision(
         self, reading: float, setpoint: float, history: list[dict], detector_flags: dict

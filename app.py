@@ -17,6 +17,13 @@ whose state persists in st.session_state — while it's on, each rerun
 advances one tick, redraws, sleeps dt_seconds, then calls st.rerun() to
 trigger the next rerun. Turning "Run" off just lets the script finish
 without re-triggering itself.
+
+Phase 7 adds Tier-2 LLM triage (see engine/triage.py) -- a plain-language,
+advisory-only explanation of whatever the detector currently flags.
+Deliberately manual/on-demand only (a button, never auto-triggered) to keep
+API cost bounded, and a plain blocking call rather than AIController's
+background-thread pattern, since it's a rare one-shot action, not a
+per-tick decision with a deadline to protect.
 """
 
 import os
@@ -30,6 +37,7 @@ from pydantic import ValidationError
 
 from config_schema import load_config
 from engine.loop import ControlLoop
+from engine.triage import Triage
 from storage.historian import Historian
 
 load_dotenv()
@@ -72,6 +80,7 @@ for scenario in CONFIG["sensor"]["seeded_scenarios"]:
 def reset_simulation(seed: int | None = None) -> None:
     st.session_state.loop = ControlLoop(CONFIG, seed=seed, ai_client=st.session_state.ai_client)
     st.session_state.history = []
+    st.session_state.last_triage = None
 
 
 if "ai_client" not in st.session_state:
@@ -80,6 +89,12 @@ if "ai_client" not in st.session_state:
     # the historian tolerating a missing DSN.
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     st.session_state.ai_client = anthropic.Anthropic(api_key=api_key) if api_key else None
+if "triage" not in st.session_state:
+    st.session_state.triage = Triage(
+        client=st.session_state.ai_client,
+        model=CONFIG["triage"]["model"],
+        max_wait_s=CONFIG["triage"]["max_wait_s"],
+    )
 if "loop" not in st.session_state:
     reset_simulation()
 if "running" not in st.session_state:
@@ -157,6 +172,24 @@ with col_controls:
         st.metric("Actuator output", f"{latest['actuator_output']:.1f} %")
         st.caption(f"Active faults (ground truth): {', '.join(latest['active_faults']) or 'none'}")
         st.caption(f"Detector flags (Tier-1 belief): {format_active_flags(latest['detector_flags'])}")
+
+        any_flag_active = any(latest["detector_flags"].values())
+        if st.button("Triage with Claude", disabled=not any_flag_active):
+            with st.spinner("Asking Claude to triage the flagged anomaly..."):
+                window = CONFIG["triage"]["history_window_ticks"]
+                st.session_state.last_triage = st.session_state.triage.request(
+                    history=st.session_state.history[-window:],
+                    detector_flags=latest["detector_flags"],
+                )
+        if not any_flag_active:
+            st.caption("Triage enabled once a detector flag is active. Manual/on-demand only, to keep API cost bounded.")
+        if st.session_state.last_triage is not None:
+            result = st.session_state.last_triage
+            if result.success:
+                st.info(f"**Triage:** likely {result.fault_type} (severity: {result.severity}) — {result.explanation}")
+            else:
+                st.caption(f"Triage failed: {result.error}")
+
         st.caption(
             f"Historian: {'connected' if st.session_state.historian and st.session_state.historian.ready else 'unavailable (not blocking)'}"
         )

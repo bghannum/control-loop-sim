@@ -70,6 +70,12 @@ class AIConfig(BaseModel):
     safe_output_pct: float
 
 
+class TriageConfig(BaseModel):
+    model: str
+    history_window_ticks: int
+    max_wait_s: float
+
+
 class SeededScenario(BaseModel):
     name: str
     seed: int
@@ -91,6 +97,7 @@ class AppConfig(BaseModel):
     interlock: InterlockConfig
     pid: PIDConfig
     ai: AIConfig
+    triage: TriageConfig
     sensor: SensorConfig
 
 

@@ -11,7 +11,8 @@ lockout after repeated uncorrected trips (see engine/interlock.py).
 
 from collections import deque
 
-from engine.controllers.ai import AIController, AnthropicClientLike
+from engine.anthropic_support import AnthropicClientLike
+from engine.controllers.ai import AIController
 from engine.controllers.base import ProposedAction
 from engine.controllers.manual import ManualController
 from engine.controllers.pid import PIDController
