@@ -83,14 +83,25 @@ class Detector:
         self._ticks_seen = 0
         self._prev_flags = {"spike": False, "drift": False, "stuck": False}
 
-    def reset(self) -> None:
-        """Clear window, CUSUM state, and the boot grace period. Called by
-        ControlLoop on a fresh instance / Reset, and on a live setpoint
-        change large enough to cause its own legitimate transient."""
+    def reset(self, skip_boot_grace: bool = False) -> None:
+        """Clear window and CUSUM state. By default also restarts the boot
+        grace period -- correct for a fresh instance / Reset, or a live
+        setpoint change, both of which produce a real transient that grace
+        exists to mask.
+
+        skip_boot_grace=True is for ControlLoop.reset_interlock() specifically
+        (backlog item 8): an operator manually confirming "conditions are
+        safe, resume normal control" is not a cold start or a setpoint jump,
+        so there's no legitimate transient for grace to protect against --
+        re-arming the full 25s countdown there just gives a still-active
+        fault a 25s window to hide in if the operator reset without also
+        clearing it. Skipping means _ticks_seen starts already past
+        boot_grace_ticks, so the very next evaluate() call is live (still
+        subject to min_samples, same as any other reset)."""
         self._window.clear()
         self._cusum_pos = 0.0
         self._cusum_neg = 0.0
-        self._ticks_seen = 0
+        self._ticks_seen = self.boot_grace_ticks if skip_boot_grace else 0
         self._prev_flags = {"spike": False, "drift": False, "stuck": False}
 
     def evaluate(self, reading: float) -> dict:

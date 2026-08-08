@@ -2,7 +2,7 @@
 
 Read `README.md` and `docs/control-loop-architecture.md` first — they're the source of truth for design decisions. This file is just a pointer to where things stand.
 
-## Status: Phase 8 (Streamlit UI/UX overhaul) implemented and verified. Phase 9 (React/FastAPI frontend split) design is done (mockup in `docs/design-prompts/`) but implementation hasn't started — that's next, then docs polish at Phase 10.
+## Status: Phase 8 (Streamlit UI/UX overhaul) implemented and verified, plus backlog items 7 and 8 shipped on top of it. Phase 9 (React/FastAPI frontend split) design is done (mockup in `docs/design-prompts/`) but implementation hasn't started — that's next, then docs polish at Phase 10.
 
 Phase 0 scaffolding + prerequisites verified previously (Python 3.12.13, Docker/`timescaledb`, `.env`, `gh`, pytest scaffold).
 
@@ -123,9 +123,33 @@ The old script order rendered the left-column metrics *before* that rerun's `tic
 - Zero browser console errors across all passes.
 - `pytest -q`: 108/108 (untouched — nothing in `engine`/`storage` changed).
 
+## Backlog items 7 & 8: interlock-aware triage + boot-grace fix
+
+Both closed together right after Phase 8. Full pytest suite: **113/113 passing** (5 new). No new subsystems, no tick-record schema changes — both are fixes to existing mechanisms.
+
+### Item 8: `reset_interlock()` no longer buys a still-active fault 25s of silence
+
+The real bug from the Gemini review (`CODE_REVIEW.md` finding H.1): `Detector.reset()` always re-armed the full `boot_grace_ticks` (50 ticks / 25s) countdown, during which the detector reports no flags at all *regardless of what's actually happening* — correct after a genuine cold start (masks a legitimate startup transient), wrong after an operator manually clicks "Reset Interlock," since that isn't a cold start and there's no legitimate transient to mask. If the operator reset without also disabling an active fault toggle, the detector would silently sit out the next 25 seconds.
+
+**Fix:** `Detector.reset(skip_boot_grace: bool = False)` — when `True`, `_ticks_seen` is set to `boot_grace_ticks` (grace counted as already elapsed) instead of `0`, while still clearing the window/CUSUM state for a genuinely fresh statistical baseline. `ControlLoop.reset_interlock()` is the only caller that passes `skip_boot_grace=True`; `set_setpoint()`'s reset (a real setpoint jump) and a fresh `ControlLoop` instance both keep full grace, since those are exactly the transient-masking scenarios grace exists for.
+
+**Verified live:** heater pinned at 100% (Manual mode) until the interlock genuinely locked out from repeated hard trips, enabled the stuck-at fault *while locked out*, then pressed "Reset Interlock" without disabling it — the `stuck` flag reappeared in the Detector flags tile in **0.5 seconds** (one tick), not the old 25-second silence.
+
+### Item 7: triage is interlock-aware now, one combined button
+
+Phase 7's "Triage with Claude" only ever saw sensor readings + the current detector flags — no visibility into what the interlock itself had been doing. Confirmed with the user before building: **one combined button**, not two — a sensor fault and the interlock's reaction to it are usually the same incident, so one narration beats forcing the operator to piece two together.
+
+- `engine/triage.py`'s `_build_prompt()` now includes each history row's `interlock_result`/`interlock_reason` — these were already present on every record `app.py` passes in (the UI's full per-tick history, not the stripped-down shape `AIController`'s own prompt uses), just not previously read here. No new data plumbing, just reading what was already there.
+- `TOOL_SCHEMA`/`TriageSchema`'s `likely_fault_type` enum widened from `[spike, drift, stuck, other]` to add `interlock` — deliberately *not* one enum value per interlock reason (hard-trip vs. lockout vs. margin-reject vs. override); a single tick can involve more than one, and the free-text `explanation` field is where that specific narrative belongs. The enum only answers "sensor fault or interlock event."
+- `app.py`'s trigger condition broadened: the button now lights up on a live detector flag *or* any non-`allow` interlock result in the same history window sent to the prompt (previously detector-flag-only).
+
+**Verified live with the real API, two ways:**
+1. A synthetic-history scratch check (zero detector flags, pure margin-reject → hard-trip sequence) returned `fault_type="interlock", severity="high"`, correctly narrating it as "a genuine overheat trip (not a sensor glitch)... close to a full lockout."
+2. Live in the running app: pinned heater at 100% with **no fault toggled at all** — the button lit up purely from routine slew-rate clamping (no detector flag, no hard trip, just the interlock pacing a fast ramp-up) and Claude correctly characterized it as `severity="low"`, explicitly normal behavior, not a fault — a good sign the combined prompt isn't crying wolf on routine interlock activity.
+
 ## Code review
 
-A Gemini-authored code review lives in `CODE_REVIEW.md` (untracked, updated in place across passes rather than replaced — see its own disposition key). As of the 2026-08-07 pass: two real, independently-verified findings are queued in `BACKLOG.md` (item 8: a genuine boot-grace/reset_interlock() safety gap; and G.1's `CLAUDE.md` archiving, which this restructuring itself just addressed). Everything else from that pass was either already fixed in an earlier round or reviewed and found not applicable (with rationale recorded inline in `CODE_REVIEW.md`) — several performance-related findings were checked empirically (measured, not assumed) before being dismissed.
+A Gemini-authored code review lives in `CODE_REVIEW.md` (untracked, updated in place across passes rather than replaced — see its own disposition key). Both of its remaining open findings (H.1 the boot-grace gap, G.1 the `CLAUDE.md` archive) are now closed — see Phase 8 and "Backlog items 7 & 8" above. Everything else from that pass was either already fixed in an earlier round or reviewed and found not applicable (with rationale recorded inline in `CODE_REVIEW.md`) — several performance-related findings were checked empirically (measured, not assumed) before being dismissed.
 
 ## Backlog
 

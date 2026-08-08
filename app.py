@@ -421,16 +421,28 @@ with col_main:
         if latest is not None:
             render_tile_row(latest, loop)  # Zone F
 
+            # Backlog item 7: one combined trigger, not two separate buttons --
+            # a sensor fault and the interlock's reaction to it are usually
+            # the same underlying incident. Lights up on either a live
+            # detector flag or any non-"allow" interlock result in the same
+            # window that gets sent to the prompt, so what enables the
+            # button matches what it will actually reason about.
+            window = CONFIG["triage"]["history_window_ticks"]
+            recent = st.session_state.history[-window:]
             any_flag_active = any(latest["detector_flags"].values())
-            if st.button("Triage with Claude", disabled=not any_flag_active):
-                with st.spinner("Asking Claude to triage the flagged anomaly..."):
-                    window = CONFIG["triage"]["history_window_ticks"]
+            any_interlock_activity = any(r["interlock_result"] != "allow" for r in recent)
+            triage_available = any_flag_active or any_interlock_activity
+            if st.button("Triage with Claude", disabled=not triage_available):
+                with st.spinner("Asking Claude to triage the flagged anomaly or interlock activity..."):
                     st.session_state.last_triage = st.session_state.triage.request(
-                        history=st.session_state.history[-window:],
+                        history=recent,
                         detector_flags=latest["detector_flags"],
                     )
-            if not any_flag_active:
-                st.caption("Triage enabled once a detector flag is active. Manual/on-demand only, to keep API cost bounded.")
+            if not triage_available:
+                st.caption(
+                    "Triage enabled once a detector flag is active or the interlock has rejected/clamped/tripped "
+                    "recently. Manual/on-demand only, to keep API cost bounded."
+                )
             if st.session_state.last_triage is not None:
                 result = st.session_state.last_triage
                 if result.success:

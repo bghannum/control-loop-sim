@@ -102,6 +102,40 @@ def test_reset_clears_window_and_cusum_state():
     assert detector.evaluate(10.0) == {"spike": False, "drift": False, "stuck": False}
 
 
+def test_reset_without_skip_still_enforces_full_boot_grace():
+    # boot_grace_ticks=50 means the first 50 evaluate() calls after a plain
+    # reset() must stay silent, no matter how obviously anomalous the data
+    # is -- this is the existing, already-shipped behavior (Phase 4). This
+    # test exists as a companion to the skip_boot_grace test below, so a
+    # future change can't accidentally make skip the *only* behavior.
+    detector = Detector(
+        window_ticks=30, noise_sigma_k=1.0, z_score_threshold=100.0, cusum_slack_k=0.5,
+        cusum_threshold_h=3.0, stuck_variance_ratio=0.1, min_samples=3, boot_grace_ticks=50,
+    )
+    detector.reset()
+    for _ in range(10):  # well past min_samples=3, nowhere near boot_grace_ticks=50
+        flags = detector.evaluate(10.0)  # identical readings -- an obvious "stuck" signal
+    assert flags == {"spike": False, "drift": False, "stuck": False}
+
+
+def test_reset_with_skip_boot_grace_lets_detector_evaluate_almost_immediately():
+    # backlog item 8: reset_interlock() shouldn't buy a still-active fault
+    # 25s of silence. skip_boot_grace=True should make the detector live
+    # again after just min_samples ticks, not boot_grace_ticks.
+    detector = Detector(
+        window_ticks=30, noise_sigma_k=1.0, z_score_threshold=100.0, cusum_slack_k=0.5,
+        cusum_threshold_h=3.0, stuck_variance_ratio=0.1, min_samples=3, boot_grace_ticks=50,
+    )
+    detector.reset(skip_boot_grace=True)
+    detector.evaluate(10.0)
+    detector.evaluate(10.0)
+    # window (post-append) = [10, 10, 10] on the 3rd call -> variance=0.0 -- this
+    # would be structurally impossible if grace were still counting from 0,
+    # since 3 <= boot_grace_ticks (50) would force an all-False return regardless.
+    flags = detector.evaluate(10.0)
+    assert flags["stuck"] is True
+
+
 # --- Behavioral scenarios against the real tuned config.yaml parameters ---
 
 

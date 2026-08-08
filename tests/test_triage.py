@@ -88,7 +88,10 @@ def test_prompt_includes_history_and_detector_flags_but_not_ground_truth():
     client = FakeClient([valid_response()])
     triage = make_triage(client)
 
-    history = [{"tick": 5, "t_sensed": 301.2, "setpoint": 310.0, "actuator_output": 40.0, "active_faults": ["drift"]}]
+    history = [{
+        "tick": 5, "t_sensed": 301.2, "setpoint": 310.0, "actuator_output": 40.0,
+        "active_faults": ["drift"], "interlock_result": "allow", "interlock_reason": "within bounds",
+    }]
     triage.request(history=history, detector_flags={"spike": False, "drift": True, "stuck": False})
 
     call_kwargs = client.calls[0]
@@ -101,3 +104,34 @@ def test_prompt_includes_history_and_detector_flags_but_not_ground_truth():
     assert "active_faults" not in prompt
     assert call_kwargs["tool_choice"] == {"type": "tool", "name": "provide_fault_triage"}
     assert call_kwargs["timeout"] == 15.0
+
+
+def test_prompt_includes_interlock_result_and_reason_from_history():
+    # backlog item 7: triage is interlock-aware now, not just detector-flag-
+    # aware -- confirms the interlock's own decision (not just readings)
+    # actually reaches the prompt text.
+    client = FakeClient([valid_response()])
+    triage = make_triage(client)
+
+    history = [{
+        "tick": 42, "t_sensed": 374.0, "setpoint": 323.15, "actuator_output": 0.0,
+        "active_faults": [], "interlock_result": "reject",
+        "interlock_reason": "sensed temperature at or past T_max -- hard trip, forcing safe output (0.0%) [strike 1/2]",
+    }]
+    triage.request(history=history, detector_flags={"spike": False, "drift": False, "stuck": False})
+
+    prompt = client.calls[0]["messages"][0]["content"]
+    assert "interlock=reject" in prompt
+    assert "hard trip" in prompt
+
+
+def test_triage_schema_accepts_interlock_as_a_fault_type():
+    # backlog item 7: likely_fault_type's enum widened to include "interlock"
+    # for when the headline story is interlock behavior, not a sensor fault.
+    client = FakeClient([valid_response(likely_fault_type="interlock", explanation="Interlock rejected a proposal near the ceiling.")])
+    triage = make_triage(client)
+
+    result = triage.request(history=[], detector_flags={"spike": False, "drift": False, "stuck": False})
+
+    assert result.success is True
+    assert result.fault_type == "interlock"

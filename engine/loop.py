@@ -123,9 +123,11 @@ class ControlLoop:
         lockout and gives the detector a fresh start too, since "I've
         confirmed it's safe, resume normal control" should mean the whole
         safety pipeline gets a clean slate, not just the interlock's own
-        escalation counter."""
+        escalation counter. skip_boot_grace=True (backlog item 8): this
+        reset isn't a cold start, so it shouldn't buy a still-active fault
+        25s of silence the way a real fresh start legitimately needs."""
         self.interlock.reset_lockout()
-        self.detector.reset()
+        self.detector.reset(skip_boot_grace=True)
 
     def set_pid_gains(self, kp: float, ki: float, kd: float) -> None:
         self.pid.kp, self.pid.ki, self.pid.kd = kp, ki, kd

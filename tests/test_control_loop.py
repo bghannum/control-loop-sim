@@ -367,3 +367,35 @@ def test_reset_interlock_clears_lockout_and_detector_state():
     assert loop.interlock.locked_out is False
     assert loop.interlock.trip_strikes == 0
     assert len(loop.detector._window) == 0
+
+
+def test_reset_interlock_does_not_reintroduce_boot_grace_silence_using_real_config():
+    # backlog item 8: reset_interlock() used to call detector.reset() with
+    # its full boot-grace period re-armed, so an operator who presses the
+    # button without also disabling a still-active fault toggle got a false
+    # 25s "all clear" -- the detector went silent even though the fault
+    # never actually went away. skip_boot_grace=True fixes this; this test
+    # locks the fix in against the real shipped config, same pattern as the
+    # Phase 4 runaway-bug regression tests above.
+    with open(REAL_CONFIG_PATH) as f:
+        real_config = yaml.safe_load(f)
+    grace = real_config["detector"]["boot_grace_ticks"]
+
+    loop = ControlLoop(real_config, seed=1)
+    loop.set_mode("pid")
+    for _ in range(grace + 30):  # settle well past the initial grace period
+        loop.tick()
+
+    loop.set_stuck(True)  # fault genuinely active, and the operator forgets to clear it
+    loop.interlock.locked_out = True  # whitebox: the state a "Reset Interlock" click responds to
+
+    loop.reset_interlock()
+
+    first_flag_tick = None
+    for t in range(1, grace):  # well under the old 25s/50-tick grace window
+        record = loop.tick()
+        if record["detector_flags"]["stuck"]:
+            first_flag_tick = t
+            break
+
+    assert first_flag_tick is not None, "stuck fault was not re-flagged before the old boot-grace window would have elapsed"

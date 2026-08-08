@@ -1,6 +1,17 @@
 """Tier-2 LLM triage: a plain-language, advisory-only explanation of
 whatever the Tier-1 statistical detector (engine/detector.py) currently
-flags -- see docs/control-loop-architecture.md §3.5.
+flags, or whatever the safety interlock (engine/interlock.py) has been
+doing -- see docs/control-loop-architecture.md §3.5.
+
+**Interlock-aware (backlog item 7).** Originally (Phase 7) this only ever
+saw sensor readings and the current detector flags -- it had no visibility
+into interlock activity (rejects/clamps/trips/lockouts). One combined
+button/prompt covers both now, not two separate ones: a sensor fault and
+the interlock's reaction to it are usually the same underlying incident,
+and the caller (app.py) already has the full per-tick record on hand --
+`interlock_result`/`interlock_reason` were always available in the
+`history` this module receives, just not previously surfaced in the
+prompt.
 
 **Advisory only, never feeds back into the interlock.** This module has no
 path into control at all: it doesn't propose actuator values (that's
@@ -41,14 +52,16 @@ TOOL_NAME = "provide_fault_triage"
 
 TOOL_SCHEMA = {
     "name": TOOL_NAME,
-    "description": "Provide a plain-language triage of a flagged sensor anomaly for a non-engineer operator.",
+    "description": "Provide a plain-language triage of a flagged sensor anomaly or notable interlock activity for a non-engineer operator.",
     "input_schema": {
         "type": "object",
         "properties": {
             "likely_fault_type": {
                 "type": "string",
-                "enum": ["spike", "drift", "stuck", "other"],
-                "description": "Best guess at which fault mode is occurring, based on the flags and readings given.",
+                "enum": ["spike", "drift", "stuck", "interlock", "other"],
+                "description": "Best guess at the headline story: a specific sensor fault mode, or 'interlock' if what's "
+                "most worth explaining is the interlock's own behavior (a reject, clamp, trip, or lockout) rather than "
+                "a sensor issue. Put the specifics (which check fired, lockout status, etc.) in explanation, not here.",
             },
             "severity": {"type": "string", "enum": ["low", "medium", "high"]},
             "explanation": {
@@ -62,7 +75,7 @@ TOOL_SCHEMA = {
 
 
 class TriageSchema(BaseModel):
-    likely_fault_type: Literal["spike", "drift", "stuck", "other"]
+    likely_fault_type: Literal["spike", "drift", "stuck", "interlock", "other"]
     severity: Literal["low", "medium", "high"]
     explanation: str
 
@@ -77,16 +90,22 @@ class TriageResult:
 
 
 def _build_prompt(history: list[dict], detector_flags: dict) -> str:
+    # interlock_result/interlock_reason are already present on every record
+    # this receives (app.py passes the full per-tick record, not the
+    # stripped-down shape AIController's prompt uses) -- just not
+    # previously read here. Surfacing them is what makes this triage
+    # interlock-aware (backlog item 7), not a new data dependency.
     history_lines = "\n".join(
-        f"tick={h['tick']} sensed={h['t_sensed']:.2f}K setpoint={h['setpoint']:.2f}K actuator={h['actuator_output']:.1f}%"
+        f"tick={h['tick']} sensed={h['t_sensed']:.2f}K setpoint={h['setpoint']:.2f}K actuator={h['actuator_output']:.1f}% "
+        f"interlock={h['interlock_result']} ({h['interlock_reason']})"
         for h in history
     ) or "(no history yet)"
 
-    return f"""You are the Tier-2 explanatory layer of a thermal control loop's fault-detection system (temperatures in Kelvin). A fast, deterministic Tier-1 statistical detector has already flagged an anomaly -- your job is only to characterize it in plain language for a non-engineer operator. You have no control authority and your output is never used to make any control decision.
+    return f"""You are the Tier-2 explanatory layer of a thermal control loop's fault-detection and safety-interlock system (temperatures in Kelvin). A fast, deterministic Tier-1 statistical detector flags sensor anomalies, and a separate deterministic safety interlock allows, clamps, rejects, or overrides every proposed actuator command -- your job is only to characterize what's been happening in plain language for a non-engineer operator, whether that's a sensor fault, notable interlock activity, or both. You have no control authority and your output is never used to make any control decision.
 
 Currently active Tier-1 detector flags: {detector_flags}
 
-Recent history (oldest first):
+Recent history, including each tick's interlock decision and reason (oldest first):
 {history_lines}
 
 Provide your triage using the {TOOL_NAME} tool."""
