@@ -2,7 +2,7 @@
 
 Read `README.md` and `docs/control-loop-architecture.md` first — they're the source of truth for design decisions. This file is just a pointer to where things stand.
 
-## Status: Phase 7 (Tier-2 LLM triage) complete and verified — this closes out the doc's original MVP scope. Design work for Phase 8 (Streamlit UI/UX overhaul) and Phase 9 (React/FastAPI frontend split) is done — full mockups exist in `docs/design-prompts/`; implementation for both hasn't started. Docs polish stays last at Phase 10.
+## Status: Phase 8 (Streamlit UI/UX overhaul) implemented and verified. Phase 9 (React/FastAPI frontend split) design is done (mockup in `docs/design-prompts/`) but implementation hasn't started — that's next, then docs polish at Phase 10.
 
 Phase 0 scaffolding + prerequisites verified previously (Python 3.12.13, Docker/`timescaledb`, `.env`, `gh`, pytest scaffold).
 
@@ -24,15 +24,9 @@ Phases: (1) plant + manual control, (2) PID + mode toggle, (3) sensor fault inje
 
 **2026-08-07 renumbering:** the doc's original §5 numbered (8) as README/docs/walkthrough polish; that's now (10) so it stays last — polishing the walkthrough before the UI it's walking through has changed twice more would just mean rewriting it twice. (8) and (9) are new, user-requested phases, not in the original architecture doc — see `docs/design-prompts/` for the UX briefs written for each before implementation starts. (9) promotes the FastAPI/WebSocket service split from "deferred stretch goal" (doc §9) to a scheduled phase; still deferred/unscheduled: second-order plant model, Redis hot path, Delta Lake alternative, multi-loop interlock demo (doc §9, §11).
 
-## Phase 8 & 9 design (mockups complete, implementation not started)
+## Phase 9 design (mockup complete, implementation not started)
 
-Both are user-requested phases beyond the original architecture doc's scope. **Design work is genuinely done for both** — reviewed directly, not taken on faith: `docs/design-prompts/` holds a self-contained brief per phase (`.md`) plus the actual output of running that brief through Claude Design — a full interactive HTML mockup (`.dc.html`, ~44KB each), not a stub or a written description. Both mockups render every state the brief asked for, with real (not placeholder) data per state, and share one severity color system (green=nominal/allowed, amber=degraded, red=critical, gray=inactive) applied consistently across the status strip, decision log rows, and telemetry.
-
-**Phase 8 — Streamlit UI/UX overhaul** (`phase-8-streamlit-ui-prompt.md` / `Phase 8 Streamlit Thermal Control UI.dc.html`). Layout-only redesign, no functional change. Problem being solved: today's UI is one narrow column — 20+ stacked controls/metrics/captions of near-identical visual weight — with the decision log (the single most important element per the architecture doc) buried at the very bottom, below the chart. Proposed IA: eight zones (A status strip · B chart · C controller · D fault injection · E session controls · F telemetry tiles · G AI reasoning · H decision log, promoted to a top-level tab beside the chart), a status strip with fixed height so "nominal" is an actual rendered state rather than collapsing to empty space, and mode-switching that doesn't reflow the page. Scoped hard to what Streamlit's real layout primitives can produce (`st.columns`/`st.tabs`/`st.container(border=True)`/`st.metric`/`st.dataframe` + light CSS) — no custom JS, modals, or animated transitions. **Delivered: all 11 requested states**, dark control-room theme, each zone-labeled inline in the mockup.
-
-**Phase 9 — React/FastAPI frontend** (`phase-9-react-frontend-prompt.md` / `Phase 9 React Frontend UI.dc.html`). The unconstrained version of the same problem, once the backend splits into a FastAPI service streaming ticks over a WebSocket. Shares Phase 8's content inventory and color system, but uses freedoms Streamlit doesn't have: sticky panels, toasts for one-shot events (spike fired, lockout engaged), animated state transitions, and — new in this brief — a live WebSocket connection badge (connected/reconnecting/lost), since silently-stale data is a real failure mode worth surfacing on its own. Deliberately distinguishes *system-imposed* critical states (lockout, hard trip, AI fallback) from the *operator-chosen* one (manual override) — same severity tier, visually distinct, since the operator caused one of these on purpose. **Delivered: all 12 requested states** (Phase 8's 11 plus "connection lost"), plus a written implied-primitives legend citing shadcn/ui + Tailwind + Radix for each nonstandard interaction (e.g. toasts via shadcn Sonner, Reset/Reset Interlock as a two-stage button rather than a modal — "fast enough for a live demo, still has a confirm step").
-
-Neither phase's actual implementation has started — these are design deliverables only, ready to hand to a build pass when picked up.
+User-requested phase beyond the original architecture doc's scope, same status as Phase 8's design was before it got built (see below). `docs/design-prompts/phase-9-react-frontend-prompt.md` / `Phase 9 React Frontend UI.dc.html`. **Design work is genuinely done** — reviewed directly, not taken on faith: a full interactive HTML mockup (~44KB), not a stub. The unconstrained version of Phase 8's problem, once the backend splits into a FastAPI service streaming ticks over a WebSocket. Shares Phase 8's content inventory and severity color system (green=nominal/allowed, amber=degraded, red=critical, gray=inactive), but uses freedoms Streamlit doesn't have: sticky panels, toasts for one-shot events (spike fired, lockout engaged), animated state transitions, and a live WebSocket connection badge (connected/reconnecting/lost), since silently-stale data is a real failure mode worth surfacing on its own. Deliberately distinguishes *system-imposed* critical states (lockout, hard trip, AI fallback) from the *operator-chosen* one (manual override) — same severity tier, visually distinct, since the operator caused one of these on purpose. **Delivered: all 12 requested states** (Idle, Manual/PID/AI nominal, AI degraded, AI fallback, sensor fault, reject/clamp, hard trip, locked out, manual override, plus "connection lost"), plus a written implied-primitives legend citing shadcn/ui + Tailwind + Radix for each nonstandard interaction (e.g. toasts via shadcn Sonner, Reset/Reset Interlock as a two-stage button rather than a modal). Implementation not started — ready to hand to a build pass when picked up.
 
 ## Phase 6: interlock bounds/rate-limit checks vs. AI + decision log UI
 
@@ -85,6 +79,49 @@ Moved `FakeToolUseBlock`/`FakeTextBlock`/`FakeResponse`/`FakeMessages`/`FakeClie
 
 1. **Live against the real API** (scratch script, synthetic stuck-sensor history, no faults toggled in the running app): returned in 4.79s, correctly identified `fault_type="stuck"` with a sensible plain-language explanation referencing the exact frozen value.
 2. **Live in the browser via Playwright**, real API calls: confirmed the button is genuinely absent before the first tick, present-but-disabled with no flag active, and enabled once Manual mode + the stuck-at fault produced a real detector flag (~30s in, past `boot_grace_ticks`) — then clicking it returned `"likely stuck (severity: high) — The temperature reading has stayed frozen at exactly 293.15K for 20 straight readings..."`, correctly reasoning from the sensed-value plateau visible in the chart.
+
+## Phase 8: Streamlit UI/UX overhaul
+
+Layout/visual redesign only — no change to `engine/`'s control or safety logic. Translates the reviewed mockup (`docs/design-prompts/Phase 8 Streamlit Thermal Control UI.dc.html`, all 11 states delivered) into real Streamlit code: `app.py`'s single narrow column of 20+ stacked controls/metrics/captions is now three bordered cards (Controller / Fault injection / Session) in a left rail, plus a right-side `st.tabs(["Live", "Decision Log"])` split that promotes the decision log — "the single most important element in the whole UI" per the architecture doc — off the very bottom of the page and onto a tab beside the chart. A `Detector.reset(skip_boot_grace=True)`-shaped decision wasn't needed here (that's backlog item 8, a separate fix); this phase touched only presentation.
+
+### Zone A — status strip, now never empty
+
+The old banner was an `st.empty()` placeholder that collapsed to zero height with nothing to show — the page visibly jumped every time an alert fired or cleared, and "nominal" had no visual presence at all. Replaced with an always-rendered colored strip (`render_status_strip()`); nominal is now a real green "SYSTEM NOMINAL" state.
+
+**New severity tier, faithful to the mockup's state 9 ("hard trip firing"), not in the original banner logic:** the old banner only checked `interlock_locked_out` / `override_active` / `ai_fallback_active` — a single hard-trip tick that hadn't yet escalated to a lockout showed *nothing*, exactly the "silence isn't a calm state" problem the design brief calls out. Detected from the existing `interlock_reason` text (`"...hard trip, forcing safe output..."`, already written by `engine/interlock.py` — no new schema field). Priority order: locked out > hard trip firing > override active > AI fallback active > nominal. Hard-trip and override never coincide (interlock.py's check ordering returns from the hard-trip check before the override-eligible check runs), so no ambiguity with the existing tiers.
+
+### Zones C/D/E — left rail, grouped by role instead of one undifferentiated stack
+
+Three `st.container(border=True)` cards. **Design goal ("mode switch shouldn't resize the panel"):** the mode-specific input block (heater+override slider / Kp-Ki-Kd / AI status line — different lengths per mode) is wrapped in `st.container(height=170)`, a real fixed-height Streamlit primitive, not a CSS hack. Verified directly, not assumed: tracked the Y position of the "Fault injection" heading across Manual → PID → AI switches via Playwright — identical pixel position (734.375) in all three modes.
+
+### Zone F — telemetry tiles
+
+Replaced the vertical `st.metric` + loose-caption stack with a 7-tile row (`render_tile_row()`), each with a severity dot derived from existing fields (no new schema): sensed temp / active faults / detector flags red when a fault or flag is present; historian green when connected, gray (not red) when unavailable, matching its existing "not blocking" framing; trip strikes green at 0, amber above 0, red at/past the lockout threshold. The old "Historian: connected" and "Interlock trip strikes: N/M" captions are gone — folded into their tiles instead.
+
+### Zone G — AI reasoning panel
+
+Own `st.container(border=True)` (`render_ai_panel()`), replacing five stacked captions (confidence/rationale/sensor-concern/error/countdown). Lives in the right column's Live tab, so its appearance/disappearance across mode switches never touches the left rail — the two-column split protects that independently of Zone C's fixed-height container.
+
+### Zone H — decision log, promoted, and a real bug caught during verification
+
+Moved into the `st.tabs(["Live", "Decision Log"])` split per the mockup's own suggested resolution. First implementation used a pandas `Styler` (`.apply(axis=1)`) passed into `st.dataframe` for row-severity coloring — **this rendered as a corrupted solid-color block for most rows**, confirmed via Playwright screenshot across repeated runs, not a one-off screenshot-timing artifact. Root cause not fully diagnosed (a Glide-Data-Grid/canvas incompatibility with per-row custom CSS backgrounds in the installed Streamlit version, 1.61.0, is the leading theory) — rather than debug further, replaced it with a hand-built HTML table via `st.markdown(unsafe_allow_html=True)` (`render_decision_log_table()`), which is arguably more faithful anyway: the reviewed mockup itself is hand-built HTML/CSS, not a real grid widget. Re-verified clean after the fix. **Worth remembering as a general pattern for this codebase: `st.dataframe` + a pandas `Styler` for row-level background coloring is not reliable here — use a hand-built HTML table via `st.markdown` instead.**
+
+Also caught and fixed during the same pass: the initial severity heuristic (red for lockout/override/hard-trip, amber for clamp/reject, else transparent) left "sensor untrusted, holding at last-known-good" rows uncolored, because that state's `interlock_result` is `allow` (the proposal matched the held value) even though it's a genuinely degraded state — added `"untrusted" in reason` as a second amber trigger.
+
+Also folded in `BACKLOG.md` item 6 here, since this call site was being rewritten anyway: `use_container_width=True` → `width="stretch"`.
+
+### A second correctness fix, found while restructuring, not in the original design brief
+
+The old script order rendered the left-column metrics *before* that rerun's `tick()` call (at the very end of the script) — so on any given rerun, the chart/banner reflected the freshly-ticked data while the left-column metrics were one rerun (0.5s) stale. Harmless at that cadence, but a real inconsistency, and the Phase 8 rewrite touches exactly this code. Moved `tick()` to run immediately after the control setters, before any zone renders — every zone in a given rerun now reflects the exact same tick.
+
+### Verified live via Playwright (four passes: initial build, the dataframe-corruption catch, the fix, and a final confirmation)
+
+- Idle state: status strip shows real "SYSTEM NOMINAL" content, not blank space.
+- Manual → PID → AI switching: left rail height provably stable (see Zone C above).
+- Stuck-at fault (Manual mode): tiles turn red, status strip correctly stays nominal (a single hold isn't itself an alert, matching mockup state 8), decision log shows the "sensor untrusted" rows amber-tinted.
+- AI mode, default setpoint, left to overshoot (the same scenario from Phase 6's verification): caught the hard-trip banner tier live (red "HARD TRIP" chip, `102.8°C` true / `103.1°C` sensed / `0%` actuator, `1/2` trip strikes) — a genuinely narrow window since the trip self-clears within a tick or two, needed 800ms polling to catch cleanly. Decision log for that run shows the exact expected color sequence: amber clamp rows (slew-limited ramp-up) → red hard-trip rows (strike 1/2) → amber reject rows (margin check on the way back down) → amber clamp (recovery ramp).
+- Zero browser console errors across all passes.
+- `pytest -q`: 108/108 (untouched — nothing in `engine`/`storage` changed).
 
 ## Code review
 
