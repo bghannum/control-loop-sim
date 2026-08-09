@@ -40,6 +40,8 @@ def test_ws_streams_ticks(client):
             "override_active",
             "ai_fallback_active",
             "interlock_locked_out",
+            "trip_strikes",
+            "trip_lockout_threshold",
             "actuator_output",
         }
         assert record["proposed_action"]["source"] == "manual"

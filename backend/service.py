@@ -119,6 +119,27 @@ class SimulationService:
     def reset_interlock(self) -> None:
         self.loop.reset_interlock()
 
+    def get_scenarios(self) -> list[dict]:
+        # Same name-formatting app.py's SCENARIOS dict uses, so the two
+        # UIs list identical scenario names.
+        return [
+            {"name": s["name"].replace("_", " ").title(), "seed": s["seed"]}
+            for s in self._config["sensor"]["seeded_scenarios"]
+        ]
+
+    def get_controls(self) -> dict:
+        return {
+            "mode": self.loop.mode,
+            "setpoint_c": self.loop.setpoint - K_OFFSET_C,
+            "kp": self.loop.pid.kp,
+            "ki": self.loop.pid.ki,
+            "kd": self.loop.pid.kd,
+            "manual_heater_pct": self._manual_heater_pct,
+            "manual_override_requested": self.loop.manual_override_requested,
+            "drift_enabled": self.loop.sensor.drift_enabled,
+            "stuck_enabled": self.loop.sensor.stuck_enabled,
+        }
+
     def request_triage(self) -> TriageResult:
         window = self.history[-self._triage_window :]
         detector_flags = window[-1]["detector_flags"] if window else {}

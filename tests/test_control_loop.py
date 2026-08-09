@@ -45,6 +45,7 @@ CONFIG = {
         "cusum_threshold_h": 9.0,
         "stuck_variance_ratio": 0.1,
         "boot_grace_ticks": 0,  # these tests are short (1-3 ticks); no grace period needed
+        "reset_grace_ticks": 0,
     },
     # ai.max_response_wait_s + fallback_after_s = 1000s -- these tests
     # never construct a real client, so nothing should ever "fail" fast
@@ -374,9 +375,13 @@ def test_reset_interlock_does_not_reintroduce_boot_grace_silence_using_real_conf
     # its full boot-grace period re-armed, so an operator who presses the
     # button without also disabling a still-active fault toggle got a false
     # 25s "all clear" -- the detector went silent even though the fault
-    # never actually went away. skip_boot_grace=True fixes this; this test
-    # locks the fix in against the real shipped config, same pattern as the
-    # Phase 4 runaway-bug regression tests above.
+    # never actually went away. reset_interlock() now passes a short
+    # detector_reset_grace_ticks (config.yaml's reset_grace_ticks) instead
+    # of the full boot grace -- long enough to blunt a real post-trip
+    # transient (see Detector.reset()'s docstring), but still far short of
+    # the old 25s/50-tick window. This test locks in the "still far short of
+    # 25s" half of that; see test_detector.py for the grace-window mechanism
+    # itself, same pattern as the Phase 4 runaway-bug regression tests above.
     with open(REAL_CONFIG_PATH) as f:
         real_config = yaml.safe_load(f)
     grace = real_config["detector"]["boot_grace_ticks"]

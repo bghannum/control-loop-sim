@@ -83,25 +83,34 @@ class Detector:
         self._ticks_seen = 0
         self._prev_flags = {"spike": False, "drift": False, "stuck": False}
 
-    def reset(self, skip_boot_grace: bool = False) -> None:
-        """Clear window and CUSUM state. By default also restarts the boot
-        grace period -- correct for a fresh instance / Reset, or a live
+    def reset(self, grace_ticks: int | None = None) -> None:
+        """Clear window and CUSUM state. grace_ticks=None (default) uses the
+        full boot_grace_ticks -- correct for a fresh instance or a live
         setpoint change, both of which produce a real transient that grace
         exists to mask.
 
-        skip_boot_grace=True is for ControlLoop.reset_interlock() specifically
-        (backlog item 8): an operator manually confirming "conditions are
-        safe, resume normal control" is not a cold start or a setpoint jump,
-        so there's no legitimate transient for grace to protect against --
-        re-arming the full 25s countdown there just gives a still-active
-        fault a 25s window to hide in if the operator reset without also
-        clearing it. Skipping means _ticks_seen starts already past
-        boot_grace_ticks, so the very next evaluate() call is live (still
-        subject to min_samples, same as any other reset)."""
+        A short, explicit grace_ticks is for ControlLoop.reset_interlock()
+        specifically. Originally this passed 0 (backlog item 8): an operator
+        manually confirming "conditions are safe, resume normal control" is
+        not a cold start, so re-arming the full 25s countdown just gives a
+        still-active fault 25s to hide in if the operator reset without also
+        clearing it. But 0 grace turned out to have the opposite problem: a
+        reset commonly happens right after a trip, i.e. exactly when the
+        plant is most likely mid a fast, real, physical recovery (e.g.
+        cooling back down after the heater was forced to 0%) -- and with no
+        grace at all, the detector starts building CUSUM state from the
+        sharpest part of that transient, which can false-flag as sustained
+        drift and never clear (same self-sustaining-false-alarm mechanism
+        the module docstring describes for a startup ramp, just triggered by
+        a reset instead). A short grace_ticks blunts the sharpest part of a
+        post-trip transient without reopening much of the original 25s
+        hiding window -- see reset_grace_ticks in config.yaml, used by
+        ControlLoop.reset_interlock()."""
         self._window.clear()
         self._cusum_pos = 0.0
         self._cusum_neg = 0.0
-        self._ticks_seen = self.boot_grace_ticks if skip_boot_grace else 0
+        grace = self.boot_grace_ticks if grace_ticks is None else grace_ticks
+        self._ticks_seen = max(0, self.boot_grace_ticks - grace)
         self._prev_flags = {"spike": False, "drift": False, "stuck": False}
 
     def evaluate(self, reading: float) -> dict:

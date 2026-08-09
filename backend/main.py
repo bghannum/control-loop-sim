@@ -8,12 +8,17 @@ import os
 from contextlib import asynccontextmanager
 
 import anthropic
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.routers import control, stream
 from backend.service import SimulationService
 from config_schema import load_config
+
+load_dotenv()  # app.py already does this for Streamlit -- this backend didn't (Phase 9a gap:
+# it read os.environ directly, so ANTHROPIC_API_KEY only worked if the launching shell already
+# had it exported, not just present in .env).
 
 VITE_DEV_ORIGIN = "http://localhost:5173"
 

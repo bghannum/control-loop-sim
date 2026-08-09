@@ -1,6 +1,6 @@
 # Backlog
 
-Planned enhancements not yet scheduled into a build-order phase. Not part of `docs/control-loop-architecture.md`'s original design — these are refinements identified during/after Phase 4-5 development. See `CLAUDE.md` for current build status.
+Planned enhancements not yet scheduled into a build-order phase. Not part of `docs/control-loop-architecture.md`'s original design — these are refinements identified during/after Phase 4-5 development. See `CLAUDE.md` for current build status. For bigger-picture ideas that only make sense at a larger scope than this project currently targets, see `POST_MVP_BACKLOG.md` instead.
 
 Check an item off (`- [x]`) when it ships, and note which commit/phase closed it.
 
@@ -37,3 +37,11 @@ Requested 2026-08-07, after Phase 7 shipped.
 Requested 2026-08-07, from a Gemini code-review pass (see `CODE_REVIEW.md` finding H.1) — independently verified as a genuine bug, not just a review suggestion.
 
 - [x] **8. `reset_interlock()` re-arms the detector's 25s boot-grace period, masking a still-active fault.** Shipped, exactly as designed: `Detector.reset(skip_boot_grace=True)`, called only by `reset_interlock()`; `set_setpoint()`'s reset and a fresh instance both keep full grace. Regression tests added at both the `Detector` level and the `ControlLoop` level (real `config.yaml`, mirroring the Phase 4 runaway-bug regression tests). Verified live: heater pinned at 100% until a real lockout, stuck-at fault enabled while locked out, "Reset Interlock" pressed without disabling it — the `stuck` flag reappeared in 0.5s, not 25s. See `CLAUDE.md`'s "Backlog items 7 & 8" section.
+
+---
+
+## Phase 9c follow-ups
+
+Identified while building the React frontend's Historian telemetry tile (Phase 9c, see `CLAUDE.md`).
+
+- [ ] **9. FastAPI backend never wires up a `Historian` instance.** `backend/service.py`'s `SimulationService` has no historian at all -- Phase 4 only wired one into `app.py`/Streamlit. 9c's Historian tile shows "not wired" honestly rather than faking connectivity. Wiring one in (construct from `TIMESCALE_DSN` in `backend/main.py`'s lifespan, write from `_tick_loop`, expose `.ready` via `GET /state`'s `controls` block or a new field) is a real, scoped enhancement -- not speculative like `POST_MVP_BACKLOG.md`'s items -- just not done as part of building the frontend that would display it.

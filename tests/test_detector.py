@@ -118,21 +118,45 @@ def test_reset_without_skip_still_enforces_full_boot_grace():
     assert flags == {"spike": False, "drift": False, "stuck": False}
 
 
-def test_reset_with_skip_boot_grace_lets_detector_evaluate_almost_immediately():
+def test_reset_with_grace_ticks_zero_lets_detector_evaluate_almost_immediately():
     # backlog item 8: reset_interlock() shouldn't buy a still-active fault
-    # 25s of silence. skip_boot_grace=True should make the detector live
-    # again after just min_samples ticks, not boot_grace_ticks.
+    # 25s of silence. grace_ticks=0 should make the detector live again
+    # after just min_samples ticks, not boot_grace_ticks.
     detector = Detector(
         window_ticks=30, noise_sigma_k=1.0, z_score_threshold=100.0, cusum_slack_k=0.5,
         cusum_threshold_h=3.0, stuck_variance_ratio=0.1, min_samples=3, boot_grace_ticks=50,
     )
-    detector.reset(skip_boot_grace=True)
+    detector.reset(grace_ticks=0)
     detector.evaluate(10.0)
     detector.evaluate(10.0)
     # window (post-append) = [10, 10, 10] on the 3rd call -> variance=0.0 -- this
     # would be structurally impossible if grace were still counting from 0,
     # since 3 <= boot_grace_ticks (50) would force an all-False return regardless.
     flags = detector.evaluate(10.0)
+    assert flags["stuck"] is True
+
+
+def test_reset_with_short_grace_ticks_delays_evaluation_by_exactly_that_many():
+    # The reset_interlock() fix-for-the-fix: a short, explicit grace_ticks
+    # (found live, post-9c) skips evaluation for exactly that many ticks --
+    # neither the full boot_grace_ticks nor zero. Also confirms evaluate()
+    # returning early during grace means the CUSUM/window state genuinely
+    # isn't touched by readings seen during the grace window (the actual
+    # mechanism that blunts a fast post-trip transient), not just that the
+    # returned flags happen to be False.
+    detector = Detector(
+        window_ticks=30, noise_sigma_k=1.0, z_score_threshold=100.0, cusum_slack_k=0.5,
+        cusum_threshold_h=3.0, stuck_variance_ratio=0.1, min_samples=3, boot_grace_ticks=50,
+    )
+    detector.reset(grace_ticks=4)
+    for _ in range(4):  # exactly the grace window -- must stay silent and untouched
+        flags = detector.evaluate(999.0)  # wildly anomalous, would spike/drift/stuck if evaluated
+        assert flags == {"spike": False, "drift": False, "stuck": False}
+    assert len(detector._window) == 0  # grace-window readings never entered the window
+
+    detector.evaluate(10.0)
+    detector.evaluate(10.0)
+    flags = detector.evaluate(10.0)  # 3rd live reading (min_samples=3) -- window=[10,10,10]
     assert flags["stuck"] is True
 
 

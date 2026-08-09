@@ -174,7 +174,9 @@ Given this runs in Streamlit, state lives in `st.session_state` as a rolling buf
   "active_faults": [...], "detector_flags": {...},
   "controller_source": "manual"|"pid"|"ai",
   "proposed_action": {...}, "interlock_result": "allow"|"clamp"|"reject",
-  "interlock_reason": str, "actuator_output": float
+  "interlock_reason": str, "override_active": bool, "ai_fallback_active": bool,
+  "interlock_locked_out": bool, "trip_strikes": int, "trip_lockout_threshold": int,
+  "actuator_output": float
 }
 ```
 

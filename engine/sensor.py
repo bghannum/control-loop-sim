@@ -47,6 +47,14 @@ class Sensor:
     def reseed(self, seed: int | None) -> None:
         self._rng = np.random.default_rng(seed)
 
+    @property
+    def drift_enabled(self) -> bool:
+        return self._drift_active
+
+    @property
+    def stuck_enabled(self) -> bool:
+        return self._stuck_active
+
     def set_drift(self, enabled: bool) -> None:
         # UI setters are called unconditionally every rerun (same pattern as
         # ControlLoop.set_mode), so only reset the ramp on an actual

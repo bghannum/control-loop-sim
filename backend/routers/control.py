@@ -6,12 +6,14 @@ ControlLoop). See docs/phase-9a-backend-plan.md for the full endpoint table.
 from fastapi import APIRouter, Request
 
 from backend.schemas import (
+    ControlsOut,
     FaultToggleRequest,
     ManualRequest,
     ModeRequest,
     PidGainsRequest,
     ResetRequest,
     RunRequest,
+    ScenarioOut,
     SetpointRequest,
     TickRecord,
     TriageResponse,
@@ -100,6 +102,11 @@ def request_triage(request: Request):
     )
 
 
+@router.get("/config/scenarios", response_model=list[ScenarioOut])
+def get_scenarios(request: Request):
+    return _service(request).get_scenarios()
+
+
 @router.get("/state")
 def get_state(request: Request):
     service = _service(request)
@@ -107,4 +114,5 @@ def get_state(request: Request):
         "history": [TickRecord.from_domain(r) for r in service.history],
         "running": service.running,
         "mode": service.loop.mode,
+        "controls": ControlsOut(**service.get_controls()),
     }

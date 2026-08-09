@@ -43,6 +43,7 @@ class DetectorConfig(BaseModel):
     cusum_threshold_h: float
     stuck_variance_ratio: float
     boot_grace_ticks: int
+    reset_grace_ticks: int
 
 
 class InterlockConfig(BaseModel):

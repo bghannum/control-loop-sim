@@ -29,6 +29,8 @@ class TickRecord(BaseModel):
     override_active: bool
     ai_fallback_active: bool
     interlock_locked_out: bool
+    trip_strikes: int
+    trip_lockout_threshold: int
     actuator_output: float
 
     @classmethod
@@ -76,6 +78,28 @@ class RunRequest(BaseModel):
 
 class ResetRequest(BaseModel):
     seed: int | None = None
+
+
+class ControlsOut(BaseModel):
+    """Current control-surface state, independent of tick history -- lets a
+    freshly-loaded or reconnected frontend render accurate values (setpoint,
+    gains, fault toggles) even before the first tick lands, rather than
+    guessing at config defaults client-side."""
+
+    mode: str
+    setpoint_c: float
+    kp: float
+    ki: float
+    kd: float
+    manual_heater_pct: float
+    manual_override_requested: bool
+    drift_enabled: bool
+    stuck_enabled: bool
+
+
+class ScenarioOut(BaseModel):
+    name: str
+    seed: int
 
 
 class TriageResponse(BaseModel):

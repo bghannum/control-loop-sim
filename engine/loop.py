@@ -72,6 +72,7 @@ class ControlLoop:
             stuck_variance_ratio=detector_cfg["stuck_variance_ratio"],
             boot_grace_ticks=detector_cfg["boot_grace_ticks"],
         )
+        self.detector_reset_grace_ticks = detector_cfg["reset_grace_ticks"]
 
         interlock_cfg = config["interlock"]
         self.interlock = Interlock(
@@ -123,11 +124,15 @@ class ControlLoop:
         lockout and gives the detector a fresh start too, since "I've
         confirmed it's safe, resume normal control" should mean the whole
         safety pipeline gets a clean slate, not just the interlock's own
-        escalation counter. skip_boot_grace=True (backlog item 8): this
-        reset isn't a cold start, so it shouldn't buy a still-active fault
-        25s of silence the way a real fresh start legitimately needs."""
+        escalation counter. Uses detector_reset_grace_ticks, not the full
+        boot grace (backlog item 8: this reset isn't a cold start, so it
+        shouldn't buy a still-active fault 25s of silence) -- but not zero
+        grace either, since a reset commonly happens right after a trip,
+        exactly when the plant is likely mid a fast real recovery transient
+        that a completely ungraced detector can mistake for sustained drift
+        (see Detector.reset()'s docstring)."""
         self.interlock.reset_lockout()
-        self.detector.reset(skip_boot_grace=True)
+        self.detector.reset(grace_ticks=self.detector_reset_grace_ticks)
 
     def set_pid_gains(self, kp: float, ki: float, kd: float) -> None:
         self.pid.kp, self.pid.ki, self.pid.kd = kp, ki, kd
@@ -204,5 +209,7 @@ class ControlLoop:
             "override_active": decision.override_active,
             "ai_fallback_active": ai_fallback_active,
             "interlock_locked_out": self.interlock.locked_out,
+            "trip_strikes": self.interlock.trip_strikes,
+            "trip_lockout_threshold": self.interlock.trip_lockout_threshold,
             "actuator_output": actuator_output,
         }

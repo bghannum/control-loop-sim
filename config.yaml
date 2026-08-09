@@ -33,6 +33,16 @@ detector:
                                   # freezes the actuator at a non-equilibrium value, and the
                                   # resulting continued heating never lets the flag clear.
                                   # 40 ticks was already sufficient in testing; 50 adds margin.
+  reset_grace_ticks: 10          # short grace window used only by ControlLoop.reset_interlock(),
+                                  # not the full boot_grace_ticks above (backlog item 8: a
+                                  # still-active fault shouldn't get 25s to hide after a manual
+                                  # reset). But a reset commonly happens right after a trip, i.e.
+                                  # right when the plant is mid a fast real recovery transient
+                                  # that can itself false-flag as drift (the same failure mode
+                                  # boot_grace_ticks exists to prevent for a startup ramp) --
+                                  # found live, post-9c, via a hard-trip-then-cooldown session.
+                                  # 10 ticks (5s) blunts the sharpest part of that transient while
+                                  # keeping a still-active fault's reappearance well under 25s.
 
 # Used starting Phase 4 (interlock bounds/rate-limit checks)
 interlock:

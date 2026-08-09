@@ -90,16 +90,43 @@ def test_reset_interlock(client):
     assert svc.loop.interlock.locked_out is False
 
 
-def test_triage_endpoint_no_client_configured(client):
-    resp = client.post("/triage")
+def test_triage_endpoint_no_client_configured(monkeypatch):
+    # Explicit rather than relying on the ambient shell/`.env` lacking the
+    # key -- main.py now calls load_dotenv() (see backend/main.py), so this
+    # test must remove the key itself to exercise the no-client path.
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with TestClient(app) as c:
+        resp = c.post("/triage")
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is False
     assert body["error"] is not None
 
 
+def test_get_scenarios(client):
+    resp = client.get("/config/scenarios")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert {"name": "Clean Late Drift", "seed": 1001} in body
+    assert {"name": "Early Stuck With Noise", "seed": 1002} in body
+    assert {"name": "Spike Burst On Setpoint Change", "seed": 1003} in body
+
+
 def test_get_state(client):
     resp = client.get("/state")
     assert resp.status_code == 200
     body = resp.json()
-    assert body == {"history": [], "running": False, "mode": "manual"}
+    assert body["history"] == []
+    assert body["running"] is False
+    assert body["mode"] == "manual"
+    assert body["controls"] == {
+        "mode": "manual",
+        "setpoint_c": pytest.approx(50.0),
+        "kp": pytest.approx(2.0),
+        "ki": pytest.approx(0.5),
+        "kd": pytest.approx(0.1),
+        "manual_heater_pct": 0.0,
+        "manual_override_requested": False,
+        "drift_enabled": False,
+        "stuck_enabled": False,
+    }
