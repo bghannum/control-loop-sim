@@ -11,3 +11,7 @@ venv/
 
 .streamlit/secrets.toml
 
+# AI-agent project context/build log -- session narrative, not curated
+# public documentation. Kept locally, not pushed.
+CLAUDE.md
+

@@ -2,7 +2,7 @@
 ## Technical Design Document
 
 **Author:** Brian Hannum
-**Status:** Draft v2
+**Status:** Draft v2 — written before/during the build, kept as-is for the design reasoning. It does **not** track what was actually implemented; **see the [root README](../README.md) for current status and how to run it.** As of this note, everything through §9's engine/UI split has shipped (both a Streamlit UI and, per §9's recommended split, a FastAPI backend + React frontend) — most of what's framed below as a future option or open question is done.
 **Purpose:** A testbed for evaluating how a generative AI controller (Claude) performs against classical control (PID) on simple physical models — how well it tracks a setpoint, how it behaves under sensor faults, and what constraints are actually needed to trust it in a control role. The project is built around a safety-constrained architecture (AI proposes, a deterministic interlock disposes) with classical statistical fault detection as supporting infrastructure, not as a separate headline capability.
 
 ---
@@ -252,6 +252,8 @@ Mixing these two jobs into one database is a common beginner mistake — you end
 
 **Recommendation:** TimescaleDB if you want to learn something new and broadly transferable (SQL/Postgres skills apply almost everywhere). Delta Lake/Parquet if you'd rather deepen the exact skill set you're already building for the Databricks role. Either is a defensible choice — pick based on which skill gap you'd rather close.
 
+**Implemented: TimescaleDB** (`docker-compose.yml`, `storage/historian.py`), wired into the Streamlit app starting Phase 4. Not yet wired into the FastAPI backend (§9) — see `BACKLOG.md`.
+
 ### 7.4 Don't let storage slow down the control loop
 
 **The problem:** if your control loop tries to write every single tick directly to a database (especially a networked one like TimescaleDB), the loop now has to wait for that write to finish before it can continue. In a real control system, this kind of delay is exactly the sort of thing that causes real problems — the historian should never be able to slow down or block control decisions.
@@ -345,6 +347,8 @@ The current plan uses a simple, hand-written stepping method (explicit Euler —
 
 *This section covers restructuring the project from "one program that does everything" into "a backend service plus a separate frontend that talks to it" — a very common real-world pattern, and one of the most valuable things to practice here.*
 
+**Implemented.** `backend/` is the FastAPI service described in §9.2, `frontend/` is a React (not a thin Streamlit) client per the "proper web frontend" option — see the root README for how to run both. The endpoint paths below are illustrative of the pattern; the actual shipped endpoints (`backend/routers/`) differ in naming and are more numerous (one per Streamlit control, plus `/config/scenarios`, `/session/reset`, `/session/reset-interlock`, `/triage`).
+
 ### 9.1 Why split it at all?
 
 The simplest version of this project is a single Streamlit app: the simulation runs and the UI displays it in the same process, at the same time. That's fine to start, but it has real limits: only one UI can ever exist, everything freezes if you refactor the display code, and — most importantly for learning purposes — it doesn't teach you the pattern that almost all real production systems actually use, which is a **backend** (does the work) separated from a **frontend** (shows the work to a person).
@@ -383,6 +387,8 @@ Stated explicitly, rather than left implicit — a design doc that names its own
 ---
 
 ## 11. Open Questions / Stretch Goals
+
+None of these four have been built. Newer ideas raised during the actual build (rather than anticipated up front here) get logged in `BACKLOG.md` (scoped, in-flight-adjacent) or `POST_MVP_BACKLOG.md` (bigger scope changes) instead of this section.
 
 - Second-order plant dynamics (actuator lag) for more visually interesting overshoot behavior.
 - Persist tick history to Delta Lake / SQLite instead of in-memory buffer, as a Databricks-project crossover.
