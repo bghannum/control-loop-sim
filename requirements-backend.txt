@@ -1,0 +1,6 @@
+# Phase 9a: FastAPI backend deps, separate from requirements.txt so
+# Streamlit-only users aren't forced to install a web framework they're not using.
+fastapi
+uvicorn[standard]
+websockets
+httpx

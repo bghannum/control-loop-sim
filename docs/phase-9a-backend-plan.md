@@ -154,6 +154,13 @@ One-for-one with today's Streamlit controls:
 - `tests/test_backend_control_api.py` — FastAPI's `TestClient`, POST each control endpoint, assert both the HTTP response and that `service.loop`'s actual state changed (whitebox check, same style already used elsewhere in this suite, e.g. `loop.interlock.locked_out = True`).
 - `tests/test_backend_stream_api.py` — `TestClient`'s `websocket_connect()`, start the service ticking with a short `dt`, `receive_json()` a couple of times, assert the shape matches `TickRecord`.
 
+## Resilience notes for `_tick_loop`
+
+Two small additions, reviewed and confirmed worth it (a third proposal — concurrent WebSocket broadcast via `asyncio.gather` — was cut as premature: this is a single-operator, local-only tool, and the existing per-client try/except already isolates a dead socket without needing concurrency):
+
+1. **Don't let an unhandled exception silently kill the loop.** `_tick_loop` is the entire point of this phase — a tick loop that keeps running independent of any browser connection. An `asyncio.Task` that raises just dies with nothing surfaced; the sim would quietly stop ticking forever. Wrap the body of `while self._running:` in `try/except Exception`, `logger.exception()`, `continue`.
+2. **Catch `asyncio.CancelledError` on shutdown.** The verification step below runs `uvicorn --reload`, which re-triggers lifespan shutdown on every save during dev — without this, that's a stack trace on every reload, not just at final shutdown.
+
 ## Explicitly out of scope for 9a
 
 - No React/frontend code (that's 9b).
